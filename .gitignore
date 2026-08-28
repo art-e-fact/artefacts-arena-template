@@ -1,0 +1,11 @@
+/*.local.md
+
+# Python
+__pycache__/
+*.egg-info
+
+.venv/
+logs/
+outputs/
+datasets/
+*.hdf5

@@ -1,0 +1,61 @@
+# Fully procedural scene: no USD assets anywhere (background, objects, light and ground are all
+# code-generated). Demonstrates that the AssetRegistry / graph-spec pipeline resolves
+# `registry_name` purely by name, so a spawner_cfg-based Object like ProceduralCube slots in
+# exactly like a USD-backed LibraryObject.
+#
+# NOTE: this currently needs one upstream fix to run. ProceduralCube / ProceduralTable
+# (isaaclab_arena/assets/object_library.py) don't override Object.get_bounding_box(), which
+# defaults to reading `self.usd_path` — empty for procedural assets. The `on` relations below
+# call get_bounding_box() during placement solving and will raise before the sim ever starts.
+# See chat for the proposed fix.
+env_name: procedural_pick_and_place
+embodiment:
+  id: droid
+  registry_name: droid_abs_joint_pos
+  params: {}
+background:
+  id: table
+  registry_name: procedural_table
+  params: {}
+objects:
+- id: ground
+  registry_name: ground_plane
+  params: {}
+- id: light
+  registry_name: light
+  params: {}
+- id: cube
+  registry_name: procedural_cube
+  params:
+    # ProceduralCube hardcodes every instance's default prim_path to the same
+    # "{ENV_REGEX_NS}/Object", so a second instance needs an explicit distinct path.
+    prim_path: "{ENV_REGEX_NS}/Cube"
+- id: target
+  # Stand-in destination marker: there's no dedicated procedural "platform" asset yet,
+  # so this reuses procedural_cube as a second, differently-placed instance.
+  registry_name: procedural_cube
+  params:
+    prim_path: "{ENV_REGEX_NS}/Target"
+relations:
+- kind: is_anchor
+  subject: table
+  reference: null
+  params: {}
+- kind: 'on'
+  subject: cube
+  reference: table
+  params: {}
+- kind: 'on'
+  subject: target
+  reference: table
+  params: {}
+task:
+  composition: atomic
+  description: pick up the cube and place it on the target
+  subtasks:
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: cube
+      destination_location: target
+      background_scene: table
+      episode_length_s: 30.0
