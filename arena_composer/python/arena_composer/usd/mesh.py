@@ -29,6 +29,7 @@ class Surface:
     normals: np.ndarray | None = None  # (V, 3) float32
     uvs: np.ndarray | None = None  # (V, 2) float32
     face_of_triangle: np.ndarray | None = None  # (T,) int64, for GeomSubset splitting
+    face_count: int = 0  # authored faces, including any too degenerate to triangulate
 
     def select_faces(self, faces: np.ndarray) -> "Surface":
         """The triangles belonging to ``faces``, with the vertices they use.
@@ -70,32 +71,37 @@ def read_mesh(prim: Any) -> Surface | None:
         normals=_corner_values(_normals(mesh), counts, indices, width=3),
         uvs=_corner_values(_uvs(prim), counts, indices, width=2),
         face_of_triangle=face_of_triangle,
+        face_count=len(counts),
     )
 
 
-def subsets(prim: Any) -> list[tuple[np.ndarray, Any]]:
-    """Face-partitioning `GeomSubset` children, as (face indices, subset prim).
+def face_subsets(prim: Any) -> list[UsdGeom.Subset]:
+    """The prim's face-partitioning `GeomSubset` children.
 
     Isaac's robots bind a material per subset rather than per mesh, so a reader
     that only looks at the mesh's own binding leaves every link untextured.
     """
-    found = []
-    for subset in UsdGeom.Subset.GetAllGeomSubsets(UsdGeom.Imageable(prim)):
-        if subset.GetElementTypeAttr().Get() != UsdGeom.Tokens.face:
-            continue
-        faces = _array(subset.GetIndicesAttr().Get(), dtype=np.int64)
-        if faces is not None and faces.size:
-            found.append((faces, subset.GetPrim()))
-    return found
+    return [
+        subset
+        for subset in UsdGeom.Subset.GetAllGeomSubsets(UsdGeom.Imageable(prim))
+        if subset.GetElementTypeAttr().Get() == UsdGeom.Tokens.face
+    ]
 
 
-def unclaimed_faces(surface: Surface, claimed: list[np.ndarray]) -> np.ndarray:
-    """Faces no subset covers — they keep the mesh's own material binding."""
-    face_count = int(surface.face_of_triangle.max()) + 1 if surface.face_of_triangle.size else 0
-    covered = np.zeros(face_count, dtype=bool)
-    for faces in claimed:
-        covered[faces[faces < face_count]] = True
-    return np.flatnonzero(~covered)
+def subset_faces(subset: UsdGeom.Subset) -> np.ndarray | None:
+    """The faces a subset claims, or None when it claims none."""
+    return _array(subset.GetIndicesAttr().Get(), dtype=np.int64)
+
+
+def unassigned_faces(subsets: list[UsdGeom.Subset], face_count: int) -> np.ndarray:
+    """Faces no subset covers — they keep the mesh's own material binding.
+
+    OpenUSD's own family arithmetic, which knows about partition families and
+    duplicate indices in a way an `isin` over the union does not.
+    """
+    return np.asarray(
+        UsdGeom.Subset.GetUnassignedIndices(subsets, face_count), dtype=np.int64
+    )
 
 
 def _fan_triangulate(counts: np.ndarray) -> tuple[np.ndarray, np.ndarray]:

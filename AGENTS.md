@@ -54,10 +54,13 @@ string, and drops paths that do not exist — which is what keeps the viewer's a
 logging a miss per texture. Every field is a list of input names tried in order, because these
 assets mix `UsdPreviewSurface`, OmniPBR/OmniSurface MDL and bare `displayColor`.
 
-`mesh.py` flattens everything to face corners (no interpolation branches downstream) and
-splits `GeomSubset` bindings into a piece apiece — Isaac's robots shade per face subset, and
-reading only the gprim's own binding leaves every link untextured. `shapes.py` tessellates the
-analytic gprims; not optional, since the maple table is a `Cube` on four `Cylinder`s.
+`mesh.py` flattens everything to face corners (no interpolation branches downstream), flips V
+into the renderer's convention (USD's `st` origin is bottom-left, glTF's and Bevy's is top
+left) and splits `GeomSubset` bindings into a piece apiece — Isaac's robots shade per face
+subset, and reading only the gprim's own binding leaves every link untextured. `shapes.py`
+tessellates the analytic gprims; not optional, since the maple table is a `Cube` on four
+`Cylinder`s.
+
 
 What still doesn't draw: MDL materials whose look lives in the `.mdl` file rather than in USD
 inputs (the maple table), and lights authored inside an asset.

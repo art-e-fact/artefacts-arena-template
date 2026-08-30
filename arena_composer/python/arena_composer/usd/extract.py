@@ -42,7 +42,7 @@ from pxr import Gf, Usd, UsdGeom, UsdUtils
 _log = logging.getLogger(__name__)
 
 from .material import Material, read_material
-from .mesh import Surface, read_mesh, subsets, unclaimed_faces
+from .mesh import Surface, face_subsets, read_mesh, subset_faces, unassigned_faces
 from .shapes import read_shape
 
 # Purposes a render-oriented viewer skips: `guide` is annotation, `proxy` is the
@@ -120,15 +120,18 @@ def _split(prim: Usd.Prim, surface: Surface) -> Iterator[tuple[Surface, Material
     Isaac's robots bind a material per face subset rather than per mesh, so a
     reader that only asks the gprim for its binding leaves every link untextured.
     """
-    partitions = subsets(prim)
+    partitions = face_subsets(prim)
     if not partitions:
         yield surface, read_material(prim)
         return
-    for faces, subset_prim in partitions:
+    for subset in partitions:
+        faces = subset_faces(subset)
+        if faces is None:
+            continue
         piece = surface.select_faces(faces)
         if piece.triangles.size:
-            yield piece, read_material(subset_prim, fallback=prim)
-    rest = unclaimed_faces(surface, [faces for faces, _ in partitions])
+            yield piece, read_material(subset.GetPrim(), fallback=prim)
+    rest = unassigned_faces(partitions, surface.face_count)
     if rest.size:
         piece = surface.select_faces(rest)
         if piece.triangles.size:
