@@ -4,6 +4,10 @@
 __pycache__/
 *.egg-info
 
+# Rust / maturin
+target/
+*.abi3.so
+
 .venv/
 logs/
 outputs/

@@ -13,7 +13,9 @@
 #   --force   Re-run uv sync even if the venv already exists
 #   -h/--help Show this help
 #
-# Requires uv (https://docs.astral.sh/uv/) and the Arena submodule:
+# Requires uv (https://docs.astral.sh/uv/), a Rust toolchain (arena_composer is
+# a maturin project — the Bevy viewer is compiled on install, which takes a few
+# minutes the first time), and the Arena submodule:
 #   git submodule update --init --recursive
 
 _setup_main() {
@@ -34,7 +36,7 @@ _setup_main() {
       --wheel) WHEEL=true ;;
       --force) FORCE=true ;;
       -h|--help)
-        sed -n '2,17p' "${BASH_SOURCE[0]:-$0}" | sed 's/^# \?//'
+        sed -n '2,19p' "${BASH_SOURCE[0]:-$0}" | sed 's/^# \?//'
         return 0
         ;;
       *)
@@ -56,6 +58,11 @@ _setup_main() {
     return 1
   fi
 
+  if ! command -v cargo >/dev/null 2>&1; then
+    echo "setup.sh: cargo not found on PATH. Install: https://rustup.rs/" >&2
+    return 1
+  fi
+
   if [[ "${WHEEL}" == true ]]; then
     UV_SYNC_ARGS=(--no-default-groups --group isaaclab-from-wheel)
   fi
@@ -69,8 +76,10 @@ _setup_main() {
   fi
 
   # uv venvs do not ship pip; install into Arena's env with uv pip.
+  # This compiles the Bevy viewer (see arena_composer/Cargo.toml) — minutes on
+  # a cold cargo cache, seconds afterwards.
   if [[ -f "${REPO_ROOT}/arena_composer/pyproject.toml" ]]; then
-    echo "setup.sh: installing arena_composer (editable) ..."
+    echo "setup.sh: installing arena_composer (editable, builds the viewer) ..."
     uv pip install --python "${VENV_DIR}/bin/python" \
       -e "${REPO_ROOT}/arena_composer" || return 1
   else
