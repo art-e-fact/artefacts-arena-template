@@ -28,8 +28,8 @@ class Surface:
     triangles: np.ndarray  # (T, 3) uint32
     normals: np.ndarray | None = None  # (V, 3) float32
     uvs: np.ndarray | None = None  # (V, 2) float32
-    face_of_triangle: np.ndarray | None = None  # (T,) int64, for GeomSubset splitting
-    face_count: int = 0  # authored faces, including any too degenerate to triangulate
+    face_of_triangle: np.ndarray | None = None  # (T,) int64, authored face index for GeomSubset splitting
+    face_count: int = 0  # authored faces in the USD mesh, including any too degenerate to triangulate
 
     def select_faces(self, faces: np.ndarray) -> "Surface":
         """The triangles belonging to ``faces``, with the vertices they use.
@@ -68,7 +68,7 @@ def read_mesh(prim: Any) -> Surface | None:
     return Surface(
         positions=points[indices].astype(np.float32),
         triangles=triangles.astype(np.uint32),
-        normals=_corner_values(_normals(mesh), counts, indices, width=3),
+        normals=_corner_values(_normals(prim, mesh), counts, indices, width=3),
         uvs=_corner_values(_uvs(prim), counts, indices, width=2),
         face_of_triangle=face_of_triangle,
         face_count=len(counts),
@@ -148,10 +148,24 @@ def _corner_values(
         # Authored length matches no interpolation we can honour; a wrong
         # normal is worse than none, since Bevy will compute flat ones.
         return None
-    return np.ascontiguousarray(expanded, dtype=np.float32)
+    # Authored data is occasionally non-finite (a packing table in the Arena
+    # library carries 16 NaN UVs). NaNs spread through tangent generation and
+    # texture sampling, so they are neutralised here rather than passed on.
+    return np.nan_to_num(
+        np.ascontiguousarray(expanded, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0
+    )
 
 
-def _normals(mesh: UsdGeom.Mesh) -> tuple[Any, str] | None:
+def _normals(prim: Any, mesh: UsdGeom.Mesh) -> tuple[Any, str] | None:
+    """Normals, preferring ``primvars:normals`` over the ``normals`` attribute.
+
+    USD gives the primvar precedence when both are authored, and some exporters
+    write only the primvar. Reading just the attribute loses those normals
+    entirely, and Bevy then computes flat ones — a faceted surface where a
+    smooth one was authored.
+    """
+    if (source := _primvar(prim, ("normals",))) is not None:
+        return source
     attribute = mesh.GetNormalsAttr()
     if not attribute.HasAuthoredValue():
         return None
@@ -159,22 +173,39 @@ def _normals(mesh: UsdGeom.Mesh) -> tuple[Any, str] | None:
 
 
 def _uvs(prim: Any) -> tuple[Any, str] | None:
-    """The first texture-coordinate primvar, flattened through its indices if it has any.
+    """The first texture-coordinate primvar.
 
     ``st`` is the near-universal name; Omniverse exports occasionally use
     ``st_0`` or ``UVMap`` instead.
     """
+    return _primvar(prim, ("st", "st_0", "UVMap", "map1"))
+
+
+def _primvar(prim: Any, names: tuple[str, ...]) -> tuple[Any, str] | None:
+    """The first authored *numeric* primvar among ``names``, flattened through its indices.
+
+    The type check is not paranoia: a kitchen scene in the Arena library authors
+    ``primvars:normals`` as a ``token[]`` holding the string ``"faceVarying"`` —
+    an exporter that wrote the interpolation into the value. Skipping it lets the
+    caller fall back to the real attribute rather than losing the normals.
+    """
     primvars = UsdGeom.PrimvarsAPI(prim)
-    for name in ("st", "st_0", "UVMap", "map1"):
+    for name in names:
         primvar = primvars.GetPrimvar(name)
-        if primvar and primvar.HasValue():
-            return primvar.ComputeFlattened(), primvar.GetInterpolation()
+        if not (primvar and primvar.HasValue()):
+            continue
+        if (values := _array(primvar.ComputeFlattened())) is not None:
+            return values, primvar.GetInterpolation()
     return None
 
 
 def _array(values: Any, dtype: Any = np.float32) -> np.ndarray | None:
-    """A contiguous numpy view of a USD array attribute, or None when it is empty."""
+    """A contiguous numpy view of a USD array attribute, or None when it is empty
+    or not numeric — assets do author a ``token[]`` where a float array belongs."""
     if values is None:
         return None
-    array = np.asarray(values, dtype=dtype)
+    try:
+        array = np.asarray(values, dtype=dtype)
+    except (TypeError, ValueError):
+        return None
     return array if array.size else None

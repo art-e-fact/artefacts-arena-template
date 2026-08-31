@@ -52,18 +52,37 @@ rather than USD's Y-up centimetres, and descends into instance proxies.
 `material.py` resolves texture paths through `Sdf.AssetPath.resolvedPath`, never the authored
 string, and drops paths that do not exist — which is what keeps the viewer's asset server from
 logging a miss per texture. Every field is a list of input names tried in order, because these
-assets mix `UsdPreviewSurface`, OmniPBR/OmniSurface MDL and bare `displayColor`.
+assets mix `UsdPreviewSurface`, OmniPBR/OmniSurface MDL, per-material bespoke MDL modules
+(the galileo backgrounds' PascalCase `AlbedoTexture`/`MainNormalInput`) and bare `displayColor`.
+Names go in a slot's list only once an asset proves the mapping — a texture named for its own
+channel layout, or a filename suffix that says what it is. Guessing costs more than it saves:
+handing a single-channel OmniPBR `metallic_texture` to Bevy's glTF-packed
+`metallic_roughness` slot makes it read roughness out of a metallic map's green channel.
+Maps that genuinely pack occlusion/roughness/metallic in glTF's channel order feed the
+`metallic_roughness` and `occlusion` slots from the same file.
 
 `mesh.py` flattens everything to face corners (no interpolation branches downstream), flips V
 into the renderer's convention (USD's `st` origin is bottom-left, glTF's and Bevy's is top
 left) and splits `GeomSubset` bindings into a piece apiece — Isaac's robots shade per face
-subset, and reading only the gprim's own binding leaves every link untextured. `shapes.py`
-tessellates the analytic gprims; not optional, since the maple table is a `Cube` on four
-`Cylinder`s.
-
+subset, and reading only the gprim's own binding leaves every link untextured. Normals come
+from `primvars:normals` before the `normals` attribute, which is both USD's precedence rule
+and the only way to read the exporters that write nothing else. Primvars are taken by name
+*and* type, and authored values are checked for NaN: assets in this library do author a
+`token[]` where a float array belongs, and NaN UVs that spread through tangent generation.
+`shapes.py` tessellates the analytic gprims; not optional, since the maple table is a `Cube`
+on four `Cylinder`s.
 
 What still doesn't draw: MDL materials whose look lives in the `.mdl` file rather than in USD
-inputs (the maple table), and lights authored inside an asset.
+inputs (the maple table authors only `project_uvw` and `world_or_object`), prims that bind no
+material at all (~13% of the galileo backgrounds), and lights authored inside an asset. The
+separate single-channel OmniPBR `metallic_texture`/`reflectionroughness_texture` pair is read
+as its scalar constants instead; packing the two into one image needs a texture cache.
+
+Sweeping the whole local asset cache is the cheap way to find these — extraction needs only
+`usd-core`, so a few hundred assets go through `extract()` in a couple of minutes with no Kit
+bootstrap, and the failures sort themselves into "renders nothing", "renders grey" and
+"crashes". A `payloads/*.usda` fragment that yields no nodes is not a bug: those are
+materials-only or physics-only sublayers that mean nothing opened standalone.
 
 ### Tests
 
@@ -75,5 +94,8 @@ arena-resolve-layout environments/tasks/droid_banana_on_plate_maple_table.yaml -
 cd arena_composer && ARENA_COMPOSER_PAYLOAD=../scene.msgpack cargo test -- --ignored
 ```
 
-`pytest arena_composer/tests` covers the USD side against minimal USDAs written inline — see
-the TODO at the top of `test_usd_material.py` for what is still uncovered.
+`pytest arena_composer/tests` covers the USD side against minimal USDAs written inline:
+`test_usd_material.py` for the shading dialects, `test_usd_mesh.py` for the geometry reader.
+Each fixture there is a reduction of something a real asset authors, so the comments name the
+asset — several of them look like mistakes in the fixture until you meet them in the wild. See
+the TODO at the top of each file for what is still uncovered.

@@ -27,23 +27,35 @@ from pxr import Sdf, UsdGeom, UsdShade
 # Input names to try, most specific dialect first. `diffuseColor` appears in
 # both the colour and the texture list because UsdPreviewSurface uses one input
 # for both — a constant when unconnected, a texture node when connected.
-_BASE_COLOR = ("diffuseColor", "diffuse_color_constant", "base_color_constant", "diffuse_tint")
+_BASE_COLOR = (
+    "diffuseColor", "diffuse_color_constant", "base_color_constant", "diffuse_tint", "ColorAlbedo"
+)
 _OPACITY = ("opacity", "opacity_constant")
 _METALLIC = ("metallic", "metallic_constant")
 _ROUGHNESS = ("roughness", "reflection_roughness_constant")
 _EMISSIVE = ("emissiveColor", "emissive_color")
 
-_BASE_COLOR_TEX = ("diffuseColor", "diffuse_texture", "base_color_texture", "diffuse_color_texture")
-_NORMAL_TEX = ("normal", "normalmap_texture", "normal_map_texture")
-# Only genuinely packed maps. Bevy reads this slot as glTF does — roughness in
-# green, metallic in blue — so OmniPBR's separate single-channel `metallic_texture`
-# and `reflectionroughness_texture` cannot go here; handing over one of them makes
+_BASE_COLOR_TEX = (
+    "diffuseColor", "diffuse_texture", "base_color_texture", "diffuse_color_texture",
+    "AlbedoTexture", "BaseColor",
+)
+_NORMAL_TEX = ("normal", "normalmap_texture", "normal_map_texture", "MainNormalInput", "Normal")
+# Maps packing occlusion, roughness and metallic into one image, in glTF's
+# channel order: R occlusion, G roughness, B metallic. Bevy reads both
+# `metallic_roughness` and `occlusion` that way, so one file feeds both slots.
+# The names are self-describing in the assets that use them —
+# `AO_R_Rough_G_Metallic_B_` resolves to `*_ao_r_m.png`, `MergeMapInput` to `*_ORM.png`.
+_ORM_TEX = ("ORM_texture", "MergeMapInput", "AO_R_Rough_G_Metallic_B_")
+# `metallic` belongs here but not in the occlusion list: UsdPreviewSurface
+# connects it to a metallic-roughness pair whose red channel means nothing.
+# OmniPBR's separate single-channel `metallic_texture` and
+# `reflectionroughness_texture` cannot go here at all — handing over either makes
 # the renderer read a roughness out of a metallic map's green channel. Their
 # scalar `metallic`/`roughness` constants are read instead, which is an
 # approximation but not a wrong one. Packing the pair is a job for a texture cache.
-_METALLIC_ROUGHNESS_TEX = ("metallic", "ORM_texture")
-_EMISSIVE_TEX = ("emissiveColor", "emissive_mask_texture")
-_OCCLUSION_TEX = ("occlusion", "ao_texture")
+_METALLIC_ROUGHNESS_TEX = ("metallic",) + _ORM_TEX
+_EMISSIVE_TEX = ("emissiveColor", "emissive_mask_texture", "Emission")
+_OCCLUSION_TEX = ("occlusion", "ao_texture") + _ORM_TEX
 
 # What a texture-reading shader calls the input holding its file path.
 _FILE_INPUTS = ("file", "texture", "diffuse_texture", "normalmap_texture")
