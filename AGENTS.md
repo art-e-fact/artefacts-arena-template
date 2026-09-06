@@ -24,6 +24,11 @@ Read before changing either side of that contract:
 arena-view environments/tasks/banana_in_bowl.yaml   # resolve a layout and look at it
 ```
 
+`arena-view` draws in a child process (`arena_composer.viewer_process`): the window's event
+loop wants a main thread and never gives it back. The parent stays an asyncio program beside
+it — today a watcher on the spec file, later whatever reacts to what it sees — and sends
+scenes down the child's stdin as length-prefixed payload frames.
+
 Iterating on the viewer alone is much faster through a packed payload, which skips Arena's
 import, the solve and the USD reads:
 
