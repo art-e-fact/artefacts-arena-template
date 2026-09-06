@@ -1,10 +1,10 @@
-Source the python venv with `source setup.sh`  
-/submodules/* are third-party. Don't edit them unless the user asks you to.  
-Keep the implementation as concise and readable as possible. Add short comments where they help the
-understanding.  
-Write comments and docs for someone who has only the code in front of them. A note must state a fact
-about the code or a rule to follow — not recount how we found it out, and not answer a question that
-was only ever asked in a chat. If a detail doesn't change what the next reader does, cut it.
+ - Run shells with `source setup.sh`. This sets up EULA, PYTHONPATH and ARENA_PROJECT_ROOT exports.
+ - /submodules/* are third-party. Don't edit them unless the user asks you to.  
+ - Keep the implementation as concise and readable as possible. Add short comments where they help the
+   understanding.  
+ - Write comments and docs for someone who has only the code in front of them. A note must state a fact
+   about the code or a rule to follow — not recount how we found it out, and not answer a question that
+   was only ever asked in a chat. If a detail doesn't change what the next reader does, cut it.
 
 ## Layout
 
