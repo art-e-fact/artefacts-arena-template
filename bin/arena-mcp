@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Launch the arena_composer MCP server with the environment Arena needs.
+#
+# MCP clients start a server with a stripped environment, so the exports
+# `setup.sh` makes have to be re-made here. Locating the repo from this script's
+# own path means a client only has to know where this file is, and every client
+# config reduces to the same one-line pointer regardless of its own format.
+#
+# This does not install anything — a server start has to be fast. Run
+# `source setup.sh` once first.
+set -euo pipefail
+
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+SERVER="${REPO_ROOT}/submodules/IsaacLab-Arena/.venv/bin/arena-mcp"
+
+if [[ ! -x "${SERVER}" ]]; then
+  # Only stderr: on stdio, stdout is the protocol, and a client reads a
+  # non-JSON line there as a broken server rather than a missing install.
+  echo "arena-mcp: no server at ${SERVER}" >&2
+  echo "  Run 'source setup.sh' in ${REPO_ROOT} to build the environment." >&2
+  exit 1
+fi
+
+export OMNI_KIT_ACCEPT_EULA=YES
+export ACCEPT_EULA=Y
+export ARENA_PROJECT_ROOT="${REPO_ROOT}"
+# Console scripts do not put cwd on sys.path, so repo-root packages are not
+# importable from them unless the repo root is on PYTHONPATH.
+export PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
+
+exec "${SERVER}" "$@"

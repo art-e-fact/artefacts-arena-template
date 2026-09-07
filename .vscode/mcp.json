@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "arena": {
+      "type": "stdio",
+      "command": "${workspaceFolder}/bin/arena-mcp"
+    }
+  }
+}
