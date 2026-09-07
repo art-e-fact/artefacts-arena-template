@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "arena": {
+      "command": "bash",
+      "args": [
+        "-c",
+        "r=$PWD; until [ -x \"$r/bin/arena-mcp\" ]; do r=${r%/*}; [ \"$r\" ] || { echo 'arena: bin/arena-mcp not found above the working directory' >&2; exit 1; }; done; exec \"$r/bin/arena-mcp\""
+      ]
+    }
+  }
+}

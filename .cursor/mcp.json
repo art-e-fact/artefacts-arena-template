@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "arena": {
+      "command": "${workspaceFolder}/bin/arena-mcp"
+    }
+  }
+}
