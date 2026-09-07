@@ -26,9 +26,9 @@ arena-view environments/tasks/banana_in_bowl.yaml   # resolve a layout and look 
 
 `arena-view` draws in a child process (`arena_composer.viewer_process`): the window's event
 loop wants a main thread and never gives it back. The parent stays an asyncio program beside
-it, and it holds Arena — so when the spec file changes it re-resolves and sends the result
-down the child's stdin, and the viewer swaps the layout without dropping the window or moving
-the camera. Closing that pipe closes the window.
+it, and it holds Arena — so when the spec (or the scene its `external_yaml` includes) changes
+it re-resolves and sends the result down the child's stdin, and the viewer swaps the layout
+without dropping the window or moving the camera. Closing that pipe closes the window.
 
 Iterating on the viewer alone is much faster through a packed payload, which skips Arena's
 import, the solve and the USD reads:
