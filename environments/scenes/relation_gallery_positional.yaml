@@ -1,0 +1,77 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Gallery of the positional relations (the ones the placement solver optimizes over):
+# is_anchor, on, next_to, not_next_to, face_to. See relation_gallery_modifiers.yaml for the
+# unary world-coordinate relations and pose modifiers.
+embodiment:
+  id: droid
+  registry_name: droid_abs_joint_pos
+  params: {}
+background:
+  id: maple_table_robolab
+  registry_name: maple_table_robolab
+  params: {}
+objects:
+- id: bowl
+  registry_name: bowl_ycb_robolab
+  params: {}
+- id: banana
+  registry_name: banana_ycb_robolab
+  params: {}
+- id: plate
+  registry_name: plate_large_vomp_robolab
+  params: {}
+- id: apple
+  registry_name: apple_01_objaverse_robolab
+  params: {}
+object_references:
+# Anchors the tabletop prim rather than the whole background, the pattern to use when only
+# part of a background asset is the actual support surface.
+- id: table_top
+  parent_id: maple_table_robolab
+  prim_path: '{ENV_REGEX_NS}/maple_table_robolab/table'
+  object_type: rigid
+  params: {}
+relations:
+- kind: is_anchor
+  subject: table_top
+  params: {}
+- kind: 'on'
+  subject: bowl
+  reference: table_top
+  params:
+    clearance_m: 0.02
+    edge_margin_m: 0.08
+- kind: 'on'
+  subject: banana
+  reference: table_top
+  params: {}
+- kind: next_to
+  subject: banana
+  reference: bowl
+  params:
+    side: positive_x
+    distance_m: 0.08
+    cross_position_ratio: 0.5
+    tolerance_m: 0.02
+- kind: 'on'
+  subject: plate
+  reference: table_top
+  params: {}
+- kind: not_next_to
+  subject: plate
+  reference: bowl
+  params:
+    side: negative_x
+    tolerance_m: 0.02
+- kind: 'on'
+  subject: apple
+  reference: table_top
+  params: {}
+- kind: face_to
+  subject: apple
+  reference: bowl
+  params: {}

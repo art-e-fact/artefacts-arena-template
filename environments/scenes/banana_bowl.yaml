@@ -18,6 +18,9 @@ objects:
 - id: bowl
   registry_name: bowl_ycb_robolab
   params: {}
+- id: apple
+  registry_name: apple_01_objaverse_robolab
+  params: {}
 relations:
 - kind: is_anchor
   subject: maple_table_robolab
@@ -29,5 +32,9 @@ relations:
   params: {}
 - kind: 'on'
   subject: banana
+  reference: maple_table_robolab
+  params: {}
+- kind: 'on'
+  subject: apple
   reference: maple_table_robolab
   params: {}

@@ -1,0 +1,54 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Gallery of the graph-level features besides relations: object_sets (see
+# relation_gallery_sets.yaml for the cli_override_specs and placement_validators that pair
+# with this scene).
+embodiment:
+  id: droid
+  registry_name: droid_abs_joint_pos
+  params: {}
+background:
+  id: maple_table_robolab
+  registry_name: maple_table_robolab
+  params: {}
+objects:
+- id: bowl
+  registry_name: bowl_ycb_robolab
+  params: {}
+- id: apple
+  registry_name: apple_01_objaverse_robolab
+  params: {}
+object_sets:
+# One environment gets sweet_potato, the next gets jug, chosen at random per environment;
+# both still resolve to a single subject id ("snack_set") for relations and task params.
+- id: snack_set
+  members:
+  - sweet_potato
+  - jug
+  random_choice: true
+  params: {}
+relations:
+- kind: is_anchor
+  subject: maple_table_robolab
+  params: {}
+- kind: 'on'
+  subject: bowl
+  reference: maple_table_robolab
+  params: {}
+- kind: 'on'
+  subject: apple
+  reference: maple_table_robolab
+  params: {}
+- kind: 'on'
+  subject: snack_set
+  reference: maple_table_robolab
+  params: {}
+- kind: next_to
+  subject: snack_set
+  reference: bowl
+  params:
+    side: positive_y
+    distance_m: 0.1

@@ -1,0 +1,23 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+env_name: relation_gallery_positional
+external_yaml: ../scenes/relation_gallery_positional.yaml
+task:
+  composition: sequential
+  description: pick up the banana and place it in the bowl, then pick up the apple and place it on the plate
+  subtasks:
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: banana
+      destination_location: bowl
+      background_scene: maple_table_robolab
+      episode_length_s: 60.0
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: apple
+      destination_location: plate
+      background_scene: maple_table_robolab
+      episode_length_s: 60.0
