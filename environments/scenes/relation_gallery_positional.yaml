@@ -1,8 +1,3 @@
-# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
-# All rights reserved.
-#
-# SPDX-License-Identifier: Apache-2.0
-
 # Gallery of the positional relations (the ones the placement solver optimizes over):
 # is_anchor, on, next_to, not_next_to, face_to. See relation_gallery_modifiers.yaml for the
 # unary world-coordinate relations and pose modifiers.
@@ -51,7 +46,7 @@ relations:
   params: {}
 - kind: next_to
   subject: banana
-  reference: bowl
+  reference: banana
   params:
     side: positive_x
     distance_m: 0.08

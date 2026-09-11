@@ -1,8 +1,3 @@
-# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
-# All rights reserved.
-#
-# SPDX-License-Identifier: Apache-2.0
-
 # Gallery of the unary, world-coordinate relations and the post-solve pose modifiers:
 # at_position, position_limits_box, position_limits_cylindrical, rotate_around_solution,
 # random_around_solution, requires_reachability. See relation_gallery_positional.yaml for the
