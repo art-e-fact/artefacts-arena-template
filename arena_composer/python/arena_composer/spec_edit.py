@@ -9,7 +9,8 @@ not have is the two things this module adds:
   ``relations`` live in exactly one of the files. An edit goes to whichever file
   owns the key.
 * **What an edit drags with it.** Removing an object also has to remove the
-  relations that name it, or the spec stops loading with a dangling reference.
+  relations that name it, and renaming one has to carry them across, or the spec
+  stops loading with a dangling reference.
 
 Every edit is checked against the merged spec before either file is written, so
 a rejected edit leaves the pair on disk exactly as it was.
@@ -80,6 +81,11 @@ class SpecFiles:
     def __init__(self, path: Path) -> None:
         self.yaml = YAML()
         self.yaml.preserve_quotes = True
+        # ruamel wraps at 80 columns by default, which would refold every task
+        # description longer than that — leaving a trailing space at the break —
+        # the first time any edit passes over the file. An edit rewrites only
+        # what it was asked to.
+        self.yaml.width = 4096
         self.yaml.representer.add_representer(str, _represent_str)
         self.yaml.representer.add_representer(type(None), _represent_none)
         self.path = Path(path).resolve()
@@ -214,6 +220,157 @@ def add_object(path: Path, node_id: str, registry_name: str, on: str | None = No
     return files.write(changed)
 
 
+#: Sections whose entries own an id a relation may name. Removing from one of
+#: these has to take the relations naming it too.
+_ID_SECTIONS = ("objects", "object_sets", "object_references")
+
+
+def apply(path: Path, op: str, steps: list[Any], value: Any = None) -> Result:
+    """Apply one edit addressed at a path into the merged spec.
+
+    This is the editor's whole write surface. `steps` walks the spec the way it
+    reads — ``["relations", 2, "params", "side"]`` — and `op` is one of:
+
+    * ``set`` — replace the leaf `steps` names. Setting an entry's ``id`` renames
+      it in the relations that name it too.
+    * ``insert`` — append `value` to the list `steps` names.
+    * ``remove`` — drop the entry `steps` names, and any relation left dangling.
+
+    One leaf at a time rather than whole sections, so a key the editor's form
+    never shows is not dropped by a write that passes over it. Which file the
+    edit lands in, and whether the result validates, are :class:`SpecFiles`'
+    problem — a rejected edit leaves both files as they were.
+    """
+    if not steps:
+        return Result.failed("an edit needs a path")
+
+    files = SpecFiles(path)
+    key = str(steps[0])
+    document = files.documents[files.owner(key)]
+
+    value = _ordered(value)
+
+    try:
+        if op == "insert":
+            # A single step names a top-level list, which may not exist yet.
+            target = files.section(key) if len(steps) == 1 else _walk(document, steps)
+            target.append(value)
+            return files.write([f"added an entry to {_label(steps)}"])
+
+        parent, last = _walk(document, steps[:-1]), steps[-1]
+        if op == "set":
+            previous = parent.get(last) if isinstance(parent, dict) else None
+            parent[last] = value
+            changed = [f"set {_label(steps)} to {value!r}"]
+            # An id is a name other entries hold, so renaming it has to carry
+            # them — the same reason removing it has to drop them.
+            if last == "id" and key in _ID_SECTIONS and previous and previous != value:
+                if renamed := _rename_node(files, previous, value):
+                    changed.append(f"renamed {previous!r} in {renamed} place(s)")
+            return files.write(changed)
+        if op == "remove":
+            changed = [f"removed {_label(steps)}"]
+            # Capture the id before the entry goes, so the cascade can find the
+            # relations that named it.
+            node_id = parent[last].get("id") if key in _ID_SECTIONS and isinstance(parent[last], dict) else None
+            del parent[last]
+            if node_id and (dropped := _drop_relations_naming(files, node_id)):
+                changed.append(f"removed {dropped} relation(s) naming {node_id!r}")
+            return files.write(changed)
+    except (KeyError, IndexError, TypeError, AttributeError) as error:
+        return Result.failed(f"{_label(steps)}: {type(error).__name__}: {error}")
+
+    return Result.failed(f"unknown edit {op!r}, expected set, insert or remove")
+
+
+#: The order an entry's keys read best in, ahead of anything unlisted.
+_KEY_ORDER = (
+    "id",
+    "registry_name",
+    "kind",
+    "subject",
+    "reference",
+    "parent_id",
+    "prim_path",
+    "object_type",
+    "members",
+    "random_choice",
+    "composition",
+    "description",
+    "subtasks",
+    "params",
+)
+
+
+def _ordered(value: Any) -> Any:
+    """A mapping in the order a spec reads best.
+
+    An edit arrives over MessagePack, where a mapping has whatever order the
+    sender's map iterated in. These files are read by people, so a written
+    entry gets a fixed key order instead of a fresh one each time.
+    """
+    if not isinstance(value, dict):
+        return value
+    rank = {key: index for index, key in enumerate(_KEY_ORDER)}
+    return {
+        key: _ordered(inner)
+        for key, inner in sorted(value.items(), key=lambda item: (rank.get(item[0], len(rank)), item[0]))
+    }
+
+
+def _walk(document: Any, steps: list[Any]) -> Any:
+    """The value `steps` names, starting from `document`."""
+    for step in steps:
+        document = document[step]
+    return document
+
+
+def _label(steps: list[Any]) -> str:
+    """A path as it reads in the spec, for a change line or an error."""
+    return ".".join(str(step) for step in steps)
+
+
+def _drop_relations_naming(files: SpecFiles, node_id: str) -> int:
+    """Remove every relation with `node_id` as subject or reference.
+
+    A relation pointing at an asset that has gone stops the spec loading at
+    all, so removing the asset has to remove them in the same edit.
+    """
+    relations = files.section("relations")
+    dropped = [r for r in relations if node_id in (r.get("subject"), r.get("reference"))]
+    for relation in dropped:
+        relations.remove(relation)
+    return len(dropped)
+
+
+def _rename_node(files: SpecFiles, previous: str, node_id: str) -> int:
+    """Point everything naming `previous` at `node_id` instead.
+
+    A name left behind is a reference to an asset that no longer exists, which
+    stops the spec loading — the same failure removing an asset without its
+    relations causes. Two places hold one: a relation's ``subject`` and
+    ``reference``, and a task param, since Arena requires every string-valued
+    task param to name a node.
+
+    Task params go with a rename and not with a remove, which leaves them
+    alone deliberately: the node a rename renames still exists.
+    """
+    renamed = 0
+    for relation in files.section("relations"):
+        for slot in ("subject", "reference"):
+            if relation.get(slot) == previous:
+                relation[slot] = node_id
+                renamed += 1
+
+    task = files.documents[files.owner("task")].get("task") or {}
+    for subtask in task.get("subtasks") or []:
+        params = subtask.get("params") or {}
+        for name in [name for name, value in params.items() if value == previous]:
+            params[name] = node_id
+            renamed += 1
+    return renamed
+
+
 def remove_object(path: Path, node_id: str) -> Result:
     """Remove an object from `path`'s scene, along with the relations naming it.
 
@@ -232,12 +389,8 @@ def remove_object(path: Path, node_id: str) -> Result:
         objects.remove(entry)
     changed = [f"removed object {node_id!r}"]
 
-    relations = files.section("relations")
-    dropped = [r for r in relations if node_id in (r.get("subject"), r.get("reference"))]
-    for relation in dropped:
-        relations.remove(relation)
-    if dropped:
-        changed.append(f"removed {len(dropped)} relation(s) naming {node_id!r}")
+    if dropped := _drop_relations_naming(files, node_id):
+        changed.append(f"removed {dropped} relation(s) naming {node_id!r}")
 
     return files.write(changed)
 

@@ -49,6 +49,47 @@ it, and it holds Arena — so when the spec (or the scene its `external_yaml` in
 it re-resolves and sends the result down the child's stdin, and the viewer swaps the layout
 without dropping the window or moving the camera. Closing that pipe closes the window.
 
+## The editor
+
+The window has a panel (`src/editor/`) that draws the authored spec as a form and edits it.
+It runs on the same pipe, in both directions:
+
+- **Down stdin** — every payload carries the merged spec, which file owns each top-level key, and
+  the `vocabulary`: the assets, and every relation and task kind with a control per parameter.
+  That last part is *inferred* from Arena's registries in `arena_composer.catalog`, never listed
+  by hand, so a relation somebody registers themselves gets a form nobody wrote. All of it is
+  ~40 kB against megabytes of geometry, so it rides every scene rather than being asked for.
+- **Up stdout** — one `{op, path, value}` per edit, framed the way a scene is (`src/wire.rs`).
+  Python applies it through `spec_edit.apply` and answers with the next scene. **Nothing else may
+  write to the child's stdout**: Bevy logs to stderr, and one stray `println!` would land
+  mid-message and desynchronise the reader.
+
+Everything that adds something picks from the vocabulary first: an object comes from the asset
+browser at the foot of the panel, a relation from a menu of registered kinds, each entry already
+carrying the parameters that kind has no default for. So there is no "add now, fix the invalid
+parts after", and no default that was picked because something had to be.
+
+Rust never writes YAML. `spec_edit` is the only writer, because it knows which of the two files a
+key belongs in, keeps comments through ruamel, and quotes what YAML 1.1 would read as a boolean.
+Rust's job is the other half — a form built so the invalid states are unreachable: ids come from
+dropdowns, and a unary relation is drawn without a `reference` slot at all. What construction
+cannot prevent comes back in the payload's `errors` and is shown above the form.
+
+A refused edit is answered by `errors` alone, with no assets — re-reading every asset's USD to say
+"no" would cost seconds. `editor::Form::take` treats such a payload as a status message and keeps
+the spec it is drawing.
+
+The panel is egui (`bevy_egui`), drawn each frame from `editor::Form` in the `EguiPrimaryContextPass`
+schedule — not `Update`, where there is no context to draw into yet. Immediate mode is
+what keeps the panel a pure function of the last payload: there is no widget tree to keep in step
+with the spec, so nothing here diffs, rebuilds or restores scroll. The only state it owns is UI
+state — the asset search, and the number under the pointer, which is held against `Form::revision`
+so a value does not snap back to the old one while Python is re-solving.
+
+`PanOrbitCamera` claims a drag from the cursor position alone and knows nothing about the panel over
+it, so `keep_the_camera_off_the_panel` toggles `enabled` from `EguiWantsInput`, latched between
+drags: a drag that starts in the panel must not orbit, and one that leaves it must not stop.
+
 `arena_composer.render` draws a packed scene from named views and writes a PNG each, in a
 child process that exits when it is done (`arena_composer.render_process` → `src/render.rs`).
 No window and no display server: Bevy runs headless with `synchronous_pipeline_compilation`,
@@ -75,6 +116,10 @@ cd arena_composer && cargo run --bin arena-viewer -- ../scene.msgpack
 ```bash
 cd arena_composer && cargo run --bin arena-render -- ../scene.msgpack top=top.png front=front.png
 ```
+
+`ARENA_VIEWER_SCREENSHOT=shot.png` on either viewer draws for a moment, writes the window to that
+path and quits — how to see what the panel actually looks like without a person at the keyboard.
+It captures the window and nothing else on the desktop.
 
 `--output` still writes the resolver's JSON dump. That stays the human- and agent-readable
 artifact; the payload is the renderer's, and carries a strict subset of its fields.

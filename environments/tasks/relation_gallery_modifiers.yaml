@@ -1,0 +1,103 @@
+# Gallery of the unary, world-coordinate relations and the post-solve pose modifiers:
+# at_position, position_limits_box, position_limits_cylindrical, rotate_around_solution,
+# random_around_solution, requires_reachability. See relation_gallery_positional.yaml for the
+# positional relations the solver optimizes over.
+env_name: relation_gallery_modifiers
+embodiment:
+  id: droid
+  registry_name: droid_abs_joint_pos
+  params: {}
+background:
+  id: maple_table_robolab
+  registry_name: maple_table_robolab
+  params: {}
+objects:
+- id: mug
+  registry_name: mug_ycb_robolab
+  params: {}
+- id: rubiks_cube
+  registry_name: rubiks_cube_hot3d_robolab
+  params: {}
+- id: bowl
+  registry_name: bowl_ycb_robolab
+  params: {}
+- id: banana
+  registry_name: banana_ycb_robolab
+  params: {}
+- id: plate
+  registry_name: plate_large_vomp_robolab
+  params: {}
+- id: apple
+  registry_name: apple_01_objaverse_robolab
+  params: {}
+relations:
+- kind: is_anchor
+  subject: maple_table_robolab
+  params: {}
+- kind: 'on'
+  subject: mug
+  reference: maple_table_robolab
+  params: {}
+- kind: at_position
+  subject: mug
+  params:
+    # On already fixes z; at_position pins the horizontal location on the surface.
+    x: 0.65
+    y: 0.15
+- kind: 'on'
+  subject: rubiks_cube
+  reference: maple_table_robolab
+  params: {}
+- kind: position_limits_box
+  subject: rubiks_cube
+  params:
+    x_min: 0.55
+    x_max: 0.7
+    y_min: -0.4
+    y_max: -0.1
+- kind: 'on'
+  subject: bowl
+  reference: maple_table_robolab
+  params: {}
+- kind: position_limits_cylindrical
+  subject: bowl
+  params:
+    center_x: 0.6
+    center_y: 0.1
+    radius_min: 0.05
+    radius_max: 0.35
+- kind: 'on'
+  subject: banana
+  reference: maple_table_robolab
+  params: {}
+- kind: rotate_around_solution
+  subject: banana
+  params:
+    yaw_rad: 1.57
+- kind: 'on'
+  subject: plate
+  reference: maple_table_robolab
+  params: {}
+- kind: random_around_solution
+  subject: plate
+  params:
+    x_half_m: 0.05
+    y_half_m: 0.05
+    yaw_half_rad: 0.2
+- kind: 'on'
+  subject: apple
+  reference: maple_table_robolab
+  params: {}
+- kind: requires_reachability
+  subject: apple
+  params: {}
+task:
+  composition: atomic
+  description: pick up the apple and place it in the bowl
+  subtasks:
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: apple
+      destination_location: bowl
+      background_scene: maple_table_robolab
+      episode_length_s: 60.0

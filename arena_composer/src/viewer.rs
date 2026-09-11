@@ -1,15 +1,21 @@
 //! The viewer: a windowed Bevy app that draws the layout it is sent.
 //!
-//! Bare bones on purpose — it uploads the geometry the payload carries under
-//! the pose the solver picked, and gives you an orbit camera to look at it.
-//! There is no editing and no sim. A resolve happens in the process that sends
-//! the scenes; this one only ever draws the newest.
+//! It uploads the geometry the payload carries under the pose the solver
+//! picked, and gives you an orbit camera to look at it. There is no sim, and
+//! no solve: a resolve happens in the process that sends the scenes, and this
+//! one only ever draws the newest.
+//!
+//! Editing is [`crate::editor`]'s, and is the same arrangement — the panel
+//! sends an edit up the pipe and draws the scene that comes back, so nothing
+//! here writes a spec either.
 
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
 use bevy::asset::{AssetPlugin, UnapprovedPathMode};
 use bevy::prelude::*;
+use bevy::render::view::screenshot::{Capturing, Screenshot, save_to_disk};
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 
 use crate::layout::{ArenaRoot, View, ambient, framing, spawn_lighting, spawn_scene};
@@ -29,8 +35,8 @@ struct SceneUpdates(Mutex<Receiver<Scene>>);
 struct Hud;
 
 pub fn run(scene: Scene, updates: Receiver<Scene>) {
-    App::new()
-        .add_plugins((
+    let mut app = App::new();
+    app.add_plugins((
             DefaultPlugins
                 .set(WindowPlugin {
                     primary_window: Some(Window {
@@ -47,11 +53,53 @@ pub fn run(scene: Scene, updates: Receiver<Scene>) {
                 }),
             PanOrbitCameraPlugin,
         ))
+        // In `run` and not in `setup`: the editor needs a render context to
+        // draw into, and `setup`'s tests build a world without one.
+        .add_plugins(crate::editor::plugin)
         .insert_resource(ResolvedScene(scene))
         .insert_resource(SceneUpdates(Mutex::new(updates)))
         .add_systems(Startup, setup)
-        .add_systems(Update, apply_updates)
-        .run();
+        .add_systems(Update, apply_updates);
+
+    // `ARENA_VIEWER_SCREENSHOT=out.png` — draw a while, write the window to
+    // that path, quit. The way to look at the UI without a person at the
+    // keyboard; it is the whole window, so it shows nothing but this app.
+    if let Some(path) = std::env::var_os("ARENA_VIEWER_SCREENSHOT") {
+        app.insert_resource(ScreenshotPath(path.into()))
+            .add_systems(Update, screenshot);
+    }
+
+    app.run();
+}
+
+/// Where [`screenshot`] writes, when the environment asked for one.
+#[derive(Resource)]
+struct ScreenshotPath(PathBuf);
+
+fn screenshot(
+    mut commands: Commands,
+    mut frame: Local<u32>,
+    path: Res<ScreenshotPath>,
+    capturing: Query<(), With<Capturing>>,
+    mut exit: MessageWriter<AppExit>,
+) {
+    // Long enough for the geometry to upload and its shaders to compile;
+    // neither happens on the frame the scene arrives.
+    const SETTLE: u32 = 30;
+    *frame += 1;
+    match *frame {
+        SETTLE => {
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk(path.0.clone()));
+        }
+        // The capture is written on a task; leaving before it lands writes
+        // nothing.
+        n if n > SETTLE && capturing.is_empty() => {
+            exit.write(AppExit::Success);
+        }
+        _ => {}
+    }
 }
 
 /// Exclusive because building meshes and materials needs `&mut World` to reach
@@ -65,6 +113,17 @@ fn setup(world: &mut World) {
     spawn_lighting(world, &scene);
     spawn_camera(world, &scene);
     spawn_hud(world, &scene);
+    show_in_form(world, &scene);
+}
+
+/// Hand a scene to the editor panel, where there is one.
+///
+/// Absent in the render path, and in the tests below — both draw a scene
+/// without ever showing a form.
+fn show_in_form(world: &mut World, scene: &Scene) {
+    if let Some(mut form) = world.get_resource_mut::<crate::editor::Form>() {
+        form.take(scene);
+    }
 }
 
 /// Draw the newest scene that has arrived, and close the window once no more
@@ -95,6 +154,7 @@ fn apply_updates(world: &mut World) {
         // and material assets are rebuilt either way — `Assets::add` mints a
         // new one per call — and the old ones are freed with their handles.
         info!("drawing {} ({} assets)", scene.env_name, scene.assets.len());
+        show_in_form(world, &scene);
         let root = spawn_scene(world, &scene);
         let stale: Vec<Entity> = world
             .query_filtered::<Entity, With<ArenaRoot>>()

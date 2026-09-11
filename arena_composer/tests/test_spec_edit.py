@@ -180,3 +180,93 @@ def test_a_spec_without_an_include_edits_itself(tmp_path: Path):
     assert result.ok, result.errors
     assert result.wrote == [str(path)]
     assert "apple" in [obj["id"] for obj in yaml.safe_load(path.read_text())["objects"]]
+
+
+LONG_DESCRIPTION = "pick up the banana and place it in the bowl, then pick up the apple and put it on the plate"
+
+
+def test_a_long_description_is_not_refolded(spec: Path):
+    """ruamel wraps at 80 columns unless told otherwise, and would refold every
+    description longer than that — with a trailing space at the break — the
+    first time an edit passed over the file."""
+    spec.write_text(TASK.replace("pick up the banana and place it in the bowl", LONG_DESCRIPTION))
+    before = spec.read_text()
+
+    result = spec_edit.add_object(spec, "apple", "apple_01_objaverse_robolab", on=TABLE)
+    assert result.ok, result.errors
+    assert result.wrote == [str(scene_of(spec))]
+    assert spec.read_text() == before, "a scene edit refolded the task spec"
+
+
+def test_an_edit_lands_in_the_file_that_owns_its_section(spec: Path):
+    """`apply` addresses the merged spec, so the path says nothing about which
+    file holds it — `env_name` is the task's, `relations` the scene's."""
+    assert spec_edit.apply(spec, "set", ["env_name"], "renamed").wrote == [str(spec)]
+
+    result = spec_edit.apply(spec, "set", ["relations", 1, "params", "clearance_m"], 0.03)
+    assert result.wrote == [str(scene_of(spec))]
+
+    scene = yaml.safe_load(scene_of(spec).read_text())
+    assert scene["relations"][1]["params"] == {"clearance_m": 0.03}
+    assert yaml.safe_load(spec.read_text())["env_name"] == "renamed"
+
+
+def test_removing_an_entry_takes_its_relations_with_it(spec: Path):
+    """A relation naming an asset that has gone stops the spec loading, so the
+    cascade is what keeps a remove valid."""
+    result = spec_edit.apply(spec, "remove", ["objects", 2])  # distractor
+    assert result.ok, result.errors
+
+    scene = yaml.safe_load(scene_of(spec).read_text())
+    assert [obj["id"] for obj in scene["objects"]] == ["banana", "bowl"]
+    assert all("distractor" not in (r["subject"], r.get("reference")) for r in scene["relations"])
+
+
+def test_a_path_that_isnt_there_is_refused(spec: Path):
+    """The editor can address a stale path — it draws the spec it was last
+    sent. That has to come back as an error, not as an exception."""
+    before = spec.read_text(), scene_of(spec).read_text()
+
+    result = spec_edit.apply(spec, "set", ["relations", 99, "params", "x"], 1.0)
+    assert not result.ok
+    assert "relations.99" in result.errors[0]
+    assert (spec.read_text(), scene_of(spec).read_text()) == before
+
+
+def test_a_whole_entry_is_written_in_a_settled_key_order(spec: Path):
+    """Changing a relation's kind replaces the entry, because the old kind's
+    parameters mean nothing to the new one and whether there is a `reference`
+    at all is the kind's to say. The entry arrives over MessagePack, where a
+    mapping carries no order, so the written keys get a fixed one rather than
+    a fresh one on every edit."""
+    entry = {"params": {"side": "positive_y"}, "subject": "banana", "kind": "next_to", "reference": TABLE}
+    assert spec_edit.apply(spec, "set", ["relations", 1], entry).ok
+
+    # PyYAML builds a dict in document order, so this is the written order.
+    written = yaml.safe_load(scene_of(spec).read_text())["relations"][1]
+    assert written == entry
+    assert list(written) == ["kind", "subject", "reference", "params"]
+
+
+def test_renaming_an_object_carries_the_relations_naming_it(spec: Path):
+    """Renaming leaves the relations pointing at a name nothing has, which
+    stops the spec loading — so the rename has to reach them too."""
+    result = spec_edit.apply(spec, "set", ["objects", 2, "id"], "extra")  # distractor
+    assert result.ok, result.errors
+
+    scene = yaml.safe_load(scene_of(spec).read_text())
+    assert [obj["id"] for obj in scene["objects"]] == ["banana", "bowl", "extra"]
+    assert [r["subject"] for r in scene["relations"] if r["subject"] == "extra"] == ["extra"]
+    assert not [r for r in scene["relations"] if "distractor" in (r["subject"], r.get("reference"))]
+
+
+def test_renaming_an_object_carries_the_task_params_naming_it(spec: Path):
+    """Arena requires every string-valued task param to name a node, so a param
+    reading as the old id is a reference to it — and the task is in the other
+    file, which the rename still has to reach."""
+    result = spec_edit.apply(spec, "set", ["objects", 0, "id"], "plantain")  # banana
+    assert result.ok, result.errors
+
+    params = yaml.safe_load(spec.read_text())["task"]["subtasks"][0]["params"]
+    assert params["pick_up_object"] == "plantain"
+    assert params["destination_location"] == "bowl", "an unrelated param was rewritten"
