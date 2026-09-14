@@ -25,6 +25,9 @@ arena-view environments/tasks/banana_in_bowl.yaml   # resolve a layout and look 
 - `arena_composer/` — everything that resolves a spec and draws it: Arena and the placement solver,
   the Bevy viewer, the headless renderer, the MCP server. Read
   [arena_composer/AGENTS.md](arena_composer/AGENTS.md) before changing any of it.
+- `envhub/` — the LeRobot side: registers the specs as a LeRobot environment type so
+  `lerobot-eval` can roll a policy out in them. Read [envhub/AGENTS.md](envhub/AGENTS.md)
+  before changing it; [docs/lerobot.md](docs/lerobot.md) has the commands.
 - `bin/arena-mcp`, `.mcp.json`, `.vscode/`, `.cursor/` — how an agent's client starts the MCP server.
 - `submodules/IsaacLab-Arena` — Arena and Isaac Lab, and the venv `setup.sh` installs this repo into.
 

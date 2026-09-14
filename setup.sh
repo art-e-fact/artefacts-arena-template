@@ -2,7 +2,7 @@
 # Host (non-Docker) environment for this Arena project.
 #
 # Syncs IsaacLab-Arena's uv venv (Isaac Lab + Arena), installs this repo's
-# packages editable into it, then activates that venv in the current shell.
+# packages and LeRobot into it, then activates that venv in the current shell.
 #
 # Must be sourced so activation sticks:
 #   source ./setup.sh
@@ -85,6 +85,16 @@ _setup_main() {
   else
     echo "setup.sh: no arena_composer/pyproject.toml — skipping project install"
   fi
+
+  # LeRobot, to train and evaluate policies in these environments (see envhub/).
+  # transformers 5 has to be asked for directly: LeRobot needs huggingface-hub>=1
+  # and transformers 4 caps it below that. The overrides hold numpy and packaging
+  # at the exact versions isaacsim-kernel requires; LeRobot's own bounds would
+  # move both and break Isaac Sim.
+  echo "setup.sh: installing LeRobot ..."
+  uv pip install --python "${VENV_DIR}/bin/python" \
+    --overrides <(printf '%s\n' 'numpy==2.3.1' 'packaging==26.0') \
+    lerobot 'transformers>=5.4.0,<5.6.0' || return 1
 
   # shellcheck disable=SC1091
   source "${VENV_DIR}/bin/activate" || return 1

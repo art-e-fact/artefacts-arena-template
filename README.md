@@ -7,7 +7,7 @@ Features:
  - Agentic development workflow.
  - Live kit-less 3D environment editor. (No RTX GPU required)
  - GUI and MCP based environment authoring. (⏳ TODO)
- - Integrated LeRobot training and evaluation. (⏳ TODO)
+ - Integrated LeRobot training and evaluation.
  - Aretefacts CI pipeline. (⏳ TODO)
  - Parametric asset generation skills. (⏳ TODO)
 
@@ -17,3 +17,6 @@ Features:
 source setup.sh
 arena-view environments/tasks/banana_in_bowl.yaml
 ```
+
+Train a policy on these environments and evaluate it, with the stock LeRobot CLI:
+[docs/lerobot.md](docs/lerobot.md).
