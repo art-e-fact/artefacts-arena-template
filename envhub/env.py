@@ -64,6 +64,7 @@ def make_env(
             episode_length=cfg.episode_length or int(env.unwrapped.max_episode_length),
             task=env.unwrapped.get_language_instruction(),
             simulation_app=simulation_app,
+            video_camera=camera_keys[0] if camera_keys else None,
         )
     except Exception:
         # Kit's app.close() (inside close_simulation) can hard-kill the process with exit
@@ -118,6 +119,8 @@ def _build_isaaclab_env(cfg: ArenaYamlEnv, spec_path: Path, n_envs: int) -> tupl
     from isaaclab_arena.environments.arena_env_builder_cfg import ArenaEnvBuilderCfg
 
     spec = ArenaEnvGraphSpec.from_yaml(spec_path)
+    if cfg.embodiment:
+        spec.embodiment.registry_name = cfg.embodiment
     logger.info("Loaded %s from %s: %s", spec.env_name, spec_path, spec.summary())
     # Cameras are spawned by the embodiment, so the flag has to reach it here.
     arena_env = spec.to_arena_env(enable_cameras=cfg.enable_cameras)
@@ -135,6 +138,9 @@ def _build_isaaclab_env(cfg: ArenaYamlEnv, spec_path: Path, n_envs: int) -> tupl
     # IsaaclabArenaProcessorStep indexes obs["policy"] by term name, which a
     # concatenating embodiment would collapse into one unnamed tensor.
     env_cfg.observations.policy.concatenate_terms = False
+    if cfg.arm_action_scale is not None:
+        assert hasattr(env_cfg.actions, "arm_action"), "--env.arm_action_scale needs an embodiment with an arm_action term"
+        env_cfg.actions.arm_action.scale = cfg.arm_action_scale
     # rgb_array lets LeRobot grab viewport frames for its evaluation videos.
     render_mode = "rgb_array" if cfg.enable_cameras else None
     env = builder.make_registered(env_cfg=env_cfg, env_kwargs=env_kwargs, render_mode=render_mode)

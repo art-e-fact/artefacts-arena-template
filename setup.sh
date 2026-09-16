@@ -94,7 +94,7 @@ _setup_main() {
   echo "setup.sh: installing LeRobot ..."
   uv pip install --python "${VENV_DIR}/bin/python" \
     --overrides <(printf '%s\n' 'numpy==2.3.1' 'packaging==26.0') \
-    lerobot 'transformers>=5.4.0,<5.6.0' || return 1
+    lerobot[dataset,smolvla,pi] 'transformers>=5.4.0,<5.6.0' || return 1
 
   # shellcheck disable=SC1091
   source "${VENV_DIR}/bin/activate" || return 1

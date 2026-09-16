@@ -60,12 +60,16 @@ class IsaacLabEnvWrapper(gym.vector.AsyncVectorEnv):
         episode_length: int,
         task: str | None = None,
         simulation_app: Any = None,
+        video_camera: str | None = None,
     ):
         self._env = env
         self._episode_length = episode_length
         self._simulation_app = simulation_app
         self._closed = False
         self.task = task
+        # Camera term whose latest frame render() returns; the Kit viewport is black without a window.
+        self._video_camera = video_camera
+        self._last_frame: np.ndarray | None = None
 
         self.render_mode = env.render_mode
         self.observation_space = self.single_observation_space = env.observation_space
@@ -104,11 +108,13 @@ class IsaacLabEnvWrapper(gym.vector.AsyncVectorEnv):
             seed = seed[0] if len(seed) > 0 else None
 
         obs, info = self._env.reset(seed=seed, options=options)
+        self._remember_frame(obs)
         info["final_info"] = {"is_success": np.zeros(self.num_envs, dtype=bool)}
         return obs, info
 
     def step(self, actions: np.ndarray | torch.Tensor) -> tuple[dict, np.ndarray, np.ndarray, np.ndarray, dict]:
         obs, reward, terminated, truncated, info = self._env.step(torch.as_tensor(actions, device=self.device))
+        self._remember_frame(obs)
 
         reward = reward.cpu().numpy().astype(np.float32)
         terminated = terminated.cpu().numpy().astype(bool)
@@ -142,8 +148,15 @@ class IsaacLabEnvWrapper(gym.vector.AsyncVectorEnv):
     def get_attr(self, name: str) -> list[Any]:
         return self.call(name)
 
+    def _remember_frame(self, obs: dict) -> None:
+        """Keep the first sub-environment's ``video_camera`` frame for :meth:`render`."""
+        if self._video_camera is not None:
+            self._last_frame = obs["camera_obs"][self._video_camera][0].cpu().numpy()
+
     def render(self) -> np.ndarray | None:
-        """Return a single RGB viewport frame (LeRobot uses these for its eval videos)."""
+        """Return one RGB frame for LeRobot's eval videos: the policy's own camera, else the viewport."""
+        if self._last_frame is not None:
+            return self._last_frame
         if self.render_mode != "rgb_array":
             return None
         frame = self._env.render()

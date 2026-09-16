@@ -6,7 +6,8 @@ into ``observation.state``, one ``observation.images.<key>`` per camera key). Tw
 things change here: the environment comes from a graph spec YAML instead of a
 registered example environment, and ``hub_path`` is cleared so
 ``lerobot.envs.make_env`` builds it locally rather than downloading an ``env.py``
-from the Hugging Face Hub.
+from the Hugging Face Hub. ``embodiment`` and ``arm_action_scale`` adapt a spec to a
+policy without editing the YAML.
 """
 
 from __future__ import annotations
@@ -48,10 +49,17 @@ class ArenaYamlEnv(IsaaclabArenaEnv):
     enable_pinocchio: bool = False
     """Only Pink IK embodiments need Pinocchio, and it must load before Isaac Sim."""
 
-    # The spec names the scene, the robot and the objects, so these select nothing.
+    # The spec names the scene and the objects, so these select nothing.
     environment: str | None = None
-    embodiment: str | None = None
     object: str | None = None
+
+    embodiment: str | None = None
+    """Registry name that replaces the spec's embodiment, to run the scene under another
+    control variant of its robot (``droid_rel_joint_pos`` for a joint-velocity policy)."""
+    arm_action_scale: float | None = None
+    """Replaces the embodiment's ``arm_action`` scale. A DROID joint-velocity policy on
+    ``droid_rel_joint_pos`` needs 0.2: DROID moves each joint by ``velocity * 0.2`` rad per
+    15 Hz control step, and this env steps at the same rate."""
 
     def create_envs(self, n_envs: int, use_async_envs: bool = False) -> dict[str, dict[int, gym.vector.VectorEnv]]:
         """Build the environment locally (called by ``lerobot.envs.make_env``)."""

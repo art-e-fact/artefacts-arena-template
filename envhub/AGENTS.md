@@ -10,6 +10,8 @@ under `environments/`. See [docs/lerobot.md](../docs/lerobot.md) for the command
 | `env.py` | `make_env()` — launches Isaac Sim, turns `--env.spec` into a batched env |
 | `isaaclab_env_wrapper.py` | Adapts that env to the vector-env API LeRobot expects |
 | `zero_action_rollout.py` | Smoke test: builds a spec and steps zero actions, no policy |
+| `checkpoint_contract.py` | Prints the keys, normalization and stats widths a checkpoint expects |
+| `add_openpi_stats.py` | Writes openpi's normalization stats into a local copy of an openpi-ported checkpoint |
 | `tests/` | The checks that run without Isaac Sim (`pytest envhub`) — outside the package, so plugin discovery does not import them |
 
 Rules this code has to keep:
