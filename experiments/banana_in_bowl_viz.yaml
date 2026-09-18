@@ -1,0 +1,27 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Open banana_in_bowl in the Kit visualizer with the embodiment's cameras spawned,
+# so their placement can be inspected. No policy server needed.
+#
+#   source setup.sh
+#   python submodules/IsaacLab-Arena/isaaclab_arena/evaluation/experiment_runner.py \
+#     --experiment_config experiments/banana_in_bowl_viz.yaml --viz kit
+#
+# `enable_cameras` must be declared here: Hydra only overrides keys a config already
+# has, so setting it from the command line on a config that omits it does nothing.
+
+runs:
+  zero_action:
+    environment:
+      type: environments/tasks/banana_in_bowl.yaml
+      enable_cameras: true
+    policy:
+      type: zero_action
+    environment_builder:
+      num_envs: 1
+      language_instruction: Pick up the banana and place it in the bowl.
+    rollout_limit:
+      num_episodes: 3

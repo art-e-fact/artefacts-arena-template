@@ -26,7 +26,21 @@ arena-view environments/tasks/banana_in_bowl.yaml   # resolve a layout and look 
   the Bevy viewer, the headless renderer, the MCP server. Read
   [arena_composer/AGENTS.md](arena_composer/AGENTS.md) before changing any of it.
 - `bin/arena-mcp`, `.mcp.json`, `.vscode/`, `.cursor/` — how an agent's client starts the MCP server.
+- `skills/` — recurring multi-step workflows as Agent Skills. When a task matches one, invoke it
+  instead of re-deriving the procedure from this file.
 - `submodules/IsaacLab-Arena` — Arena and Isaac Lab, and the venv `setup.sh` installs this repo into.
+
+## Skills
+
+Canonical sources live under `skills/user/` and `skills/developer/`, named for the primary audience;
+the folder does not restrict who may use a skill. Each is a directory holding `SKILL.md` and an
+`evaluations.md` of worked scenarios and known failure modes.
+
+Clients find them through flat aliases: `.agents/skills/<name>` symlinks to the canonical directory,
+and `.claude/skills` symlinks to `.agents/skills`. Both are committed. Adding, removing or renaming a
+skill means updating the canonical source and its alias together, or a client silently stops seeing
+it. This mirrors the layout in `submodules/IsaacLab-Arena`, whose skills are usable from here and
+are written against that submodule as their repository root.
 
 ## Starting the MCP server
 
