@@ -1,32 +1,66 @@
 //! Drawing the spec, and turning a control's click into an [`Edit`].
 
+use std::collections::BTreeSet;
+
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 
+use super::relations::{self, RelationGizmos};
 use super::{Form, PointerOverPanel, send};
-use crate::spec::{Edit, Field, Kind, Params, Step, Value};
+use crate::layout::Placed;
+use crate::spec::{Edit, Field, Kind, Params, Relation, Step, Value};
 
 /// How wide the panel opens. Draggable from there.
 const WIDTH: f32 = 360.0;
 
+/// The share of a row a name takes, leaving the rest to the control. Every row
+/// splits at the same place, so the controls line up down the panel however
+/// long the names beside them are.
+const NAMES: f32 = 0.4;
+
 /// Everything the panel remembers that is not in the spec.
-#[derive(Default)]
 pub struct PanelState {
     /// What the asset browser is filtered to.
     pub search: String,
-    /// The number being dragged or typed into, and the value it shows. One,
-    /// because only one control can be under the pointer at a time.
-    editing: Option<(egui::Id, f64)>,
+    /// The number being dragged or typed into: the control, the value it
+    /// shows, and where in the spec that value belongs. One, because only one
+    /// control can be under the pointer at a time. The path is carried so the
+    /// view can draw the value before the spec comes back carrying it.
+    editing: Option<(egui::Id, f64, Vec<Step>)>,
     /// The id being renamed, and the text typed so far. One, for the same
     /// reason: only one box can hold the caret.
     renaming: Option<(egui::Id, String)>,
     /// The spec `editing` was made against.
     revision: u64,
+    /// Relations kept drawn in the view after the pointer has left them, by
+    /// position in the list. Removing one above a pin shifts the pin.
+    pinned: BTreeSet<usize>,
+    /// Draw every relation, pointer or not.
+    show_all: bool,
+}
+
+/// `ARENA_VIEWER_SHOW_RELATIONS=all`, or `=2,5` for those positions in the
+/// list, starts with those relations drawn: the way to see them in a
+/// screenshot, where there is nothing to hover.
+impl Default for PanelState {
+    fn default() -> Self {
+        let shown = std::env::var("ARENA_VIEWER_SHOW_RELATIONS").unwrap_or_default();
+        Self {
+            search: String::new(),
+            editing: None,
+            renaming: None,
+            revision: 0,
+            pinned: shown.split(',').filter_map(|index| index.trim().parse().ok()).collect(),
+            show_all: matches!(shown.trim(), "1" | "all"),
+        }
+    }
 }
 
 pub fn draw(
     mut contexts: EguiContexts,
     form: Res<Form>,
+    placed: Res<Placed>,
+    mut gizmos: Gizmos<RelationGizmos>,
     mut state: Local<PanelState>,
     mut over_panel: ResMut<PointerOverPanel>,
 ) -> Result {
@@ -50,13 +84,34 @@ pub fn draw(
         .pointer_interact_pos()
         .is_some_and(|pointer| shown.response.rect.contains(pointer));
 
+    // The relations the panel wants seen, drawn over the layout. From here
+    // rather than a system of its own: the hover is this frame's, and a gizmo
+    // issued in egui's pass is collected with every other at the frame's end.
+    for &index in &shown.inner {
+        if let Some(relation) = form.spec.relations.get(index) {
+            // Whatever is being dragged right now stands in for what the spec
+            // says, so the view follows the number rather than the answer to it.
+            let dragged = pending(relation, index, &state);
+            let relation = dragged.as_ref().unwrap_or(relation);
+            relations::draw(relation, form.vocabulary.relation(&relation.kind), &placed, &mut gizmos);
+        }
+    }
+
     // Over the 3D view, in the corner of what the panel left of it. The view is
     // the half that is behind: an accepted edit reaches the form at once and
     // the layout only once the solver has caught up.
     if form.solving {
-        let corner = window.available_rect_before_wrap().right_top();
-        let spot = egui::Rect::from_min_size(corner + egui::vec2(-32.0, 12.0), egui::Vec2::splat(20.0));
-        window.put(spot, spinner());
+        let view = window.available_rect_before_wrap();
+        let spot = egui::Rect::from_min_size(view.right_top() + egui::vec2(-232.0, 12.0), egui::vec2(220.0, 20.0));
+        // Right to left, so the spinner keeps the corner and the words run
+        // inward from it however long they are.
+        let mut status = window.new_child(
+            egui::UiBuilder::new()
+                .max_rect(spot)
+                .layout(egui::Layout::right_to_left(egui::Align::Center)),
+        );
+        status.add(spinner());
+        status.weak("Resolving layout…");
     }
     Ok(())
 }
@@ -67,7 +122,8 @@ fn spinner() -> egui::Spinner {
     egui::Spinner::new().size(16.0)
 }
 
-fn panel(ui: &mut egui::Ui, form: &Form, state: &mut PanelState) {
+/// Draw the panel, and say which relations it wants drawn in the view.
+fn panel(ui: &mut egui::Ui, form: &Form, state: &mut PanelState) -> BTreeSet<usize> {
     // A half-made edit belongs to the spec it was made against.
     if state.revision != form.revision {
         state.revision = form.revision;
@@ -87,10 +143,13 @@ fn panel(ui: &mut egui::Ui, form: &Form, state: &mut PanelState) {
         .default_size(200.0)
         .show(ui, |ui| super::browser::show(ui, form, &mut state.search));
 
-    egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
-        objects(ui, form, state);
-        relations(ui, form, state);
-    });
+    egui::ScrollArea::vertical()
+        .auto_shrink(false)
+        .show(ui, |ui| {
+            objects(ui, form, state);
+            relations(ui, form, state)
+        })
+        .inner
 }
 
 fn objects(ui: &mut egui::Ui, form: &Form, state: &mut PanelState) {
@@ -112,47 +171,109 @@ fn objects(ui: &mut egui::Ui, form: &Form, state: &mut PanelState) {
     });
 }
 
-fn relations(ui: &mut egui::Ui, form: &Form, state: &mut PanelState) {
+/// The relations, each with a toggle to keep it drawn. Returns the ones to
+/// draw this frame: hovered, pinned, or every one when asked for them all.
+fn relations(ui: &mut egui::Ui, form: &Form, state: &mut PanelState) -> BTreeSet<usize> {
     let ids = form.spec.node_ids();
+    let mut shown = BTreeSet::new();
     group(ui, "relations", form.spec.relations.len(), form.owner("relations"), |ui| {
         for (index, relation) in form.spec.relations.iter().enumerate() {
             let path = vec![Step::from("relations"), Step::from(index)];
             let kind = form.vocabulary.relation(&relation.kind);
             let reference = relation.reference.clone().unwrap_or_default();
 
-            ui.push_id(index, |ui| {
+            let entry = ui.push_id(index, |ui| {
                 ui.group(|ui| {
+                    // The box takes the panel's width rather than its contents',
+                    // so one entry's rows line up with the next one's.
+                    ui.set_min_width(ui.available_width());
                     ui.horizontal(|ui| {
                         if remove(ui) {
                             send(Edit::Remove { path: path.clone() });
                         }
-                        // Changing the kind rewrites the whole entry: the old
-                        // kind's parameters mean nothing to the new one, and
-                        // whether there is a `reference` at all is the kind's
-                        // to say.
-                        let options = kind_options(form, &relation.subject, &reference, &ids);
-                        menu(ui, "kind", &relation.kind, options, set(&path));
+                        // Right to left: the toggle takes the far edge and the
+                        // kind spreads over whatever is left between them.
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let mut pinned = state.pinned.contains(&index);
+                            if ui.toggle_value(&mut pinned, "👁").on_hover_text("keep drawn").changed() {
+                                if pinned {
+                                    state.pinned.insert(index);
+                                } else {
+                                    state.pinned.remove(&index);
+                                }
+                            }
+                            // Changing the kind rewrites the whole entry: the
+                            // old kind's parameters mean nothing to the new
+                            // one, and whether there is a `reference` at all is
+                            // the kind's to say.
+                            let options = kind_options(form, &relation.subject, &reference, &ids);
+                            let width = ui.available_width();
+                            menu(ui, "kind", &relation.kind, options, set(&path), width);
+                        });
                     });
+                    // The kind names the whole entry, so it is a heading and
+                    // what it governs is ruled off from it.
+                    ui.separator();
+                    // The pair shares a line rather than taking one each,
+                    // because the two of them read as the relation's direction.
+                    // A unary relation takes no reference, and Arena refuses one
+                    // that has it — so the slot is not drawn rather than
+                    // validated.
+                    let binary = kind.is_some_and(|kind| kind.unary == Some(false));
                     ui.horizontal(|ui| {
-                        menu(ui, "subject", &relation.subject, id_options(&ids), set(&with(&path, "subject")));
-                        // A unary relation takes no reference, and Arena
-                        // refuses one that has it — so the slot is not drawn
-                        // rather than validated.
-                        if kind.is_some_and(|kind| kind.unary == Some(false)) {
+                        // Half the line each, so the arrow between them falls in
+                        // the same place down the panel.
+                        let width = match binary {
+                            true => ui.available_width() / 2.0 - ui.spacing().item_spacing.x,
+                            false => ui.available_width(),
+                        };
+                        let options = id_options(&ids);
+                        menu(ui, "subject", &relation.subject, options, set(&with(&path, "subject")), width)
+                            .on_hover_text("subject — the object the relation is about");
+                        if binary {
                             // `»` and not `→`: egui ships a font without an
                             // arrow in it, and a missing glyph draws as a box.
                             ui.weak("»");
-                            menu(ui, "reference", &reference, id_options(&ids), set(&with(&path, "reference")));
+                            let width = ui.available_width();
+                            let options = id_options(&ids);
+                            menu(ui, "reference", &reference, options, set(&with(&path, "reference")), width)
+                                .on_hover_text("reference — the object it is placed against");
                         }
                     });
                     params(ui, kind, &relation.params, &ids, &with(&path, "params"), state);
-                });
+                })
+                .response
             });
+            // The whole entry, controls included: a number being dragged is
+            // still the relation being looked at.
+            if entry.inner.contains_pointer() {
+                shown.insert(index);
+            }
         }
 
         let options = kind_options(form, subject_default(form), &form.spec.background.id, &ids);
-        menu(ui, "add", "+ relation", options, insert(&[Step::from("relations")]));
+        let width = ui.available_width();
+        menu(ui, "add", "+ relation", options, insert(&[Step::from("relations")]), width);
     });
+    // Outside the group, so a collapsed section keeps its pins drawn.
+    let count = form.spec.relations.len();
+    if state.show_all {
+        shown.extend(0..count);
+    } else {
+        shown.extend(state.pinned.iter().copied().filter(|&index| index < count));
+    }
+    // A number being dragged keeps its relation drawn however far the pointer
+    // has wandered: egui holds a drag after the pointer leaves the control, and
+    // the entry's hover does not.
+    shown.extend(
+        state
+            .editing
+            .as_ref()
+            .and_then(|(_, _, path)| relation_param(path))
+            .map(|(index, _)| index)
+            .filter(|&index| index < count),
+    );
+    shown
 }
 
 /// A control per parameter the kind declares, in the order it declares them.
@@ -165,16 +286,32 @@ fn params(
     state: &mut PanelState,
 ) {
     let Some(kind) = kind else { return };
-    if kind.fields.is_empty() {
-        return;
+    for field in &kind.fields {
+        let value = values.get(&field.name).unwrap_or(&field.default);
+        let path = with(base, &field.name);
+        row(ui, &field.name, |ui| control(ui, field, value, ids, &path, state));
     }
-    egui::Grid::new("params").num_columns(2).show(ui, |ui| {
-        for field in &kind.fields {
-            let value = values.get(&field.name).unwrap_or(&field.default);
-            ui.weak(&field.name);
-            control(ui, field, value, ids, &with(base, &field.name), state);
-            ui.end_row();
-        }
+}
+
+/// One named row: the name ends where the control begins, and the control takes
+/// the rest of the width. A name longer than its share is cut rather than
+/// allowed to push the control out of line.
+///
+/// The space is taken first and filled by a child laid out right to left. That
+/// is what puts the name against its control: a label fills only the axis its
+/// layout justifies, so neither `halign` nor `place` moves it off the centre of
+/// the space it was given.
+fn row(ui: &mut egui::Ui, name: &str, control: impl FnOnce(&mut egui::Ui)) {
+    ui.horizontal(|ui| {
+        let size = egui::vec2(ui.available_width() * NAMES, ui.spacing().interact_size.y);
+        let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+        ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(rect)
+                .layout(egui::Layout::right_to_left(egui::Align::Center)),
+        )
+        .add(egui::Label::new(egui::RichText::new(name).weak()).truncate());
+        control(ui);
     });
 }
 
@@ -191,13 +328,24 @@ fn control(
     state: &mut PanelState,
 ) {
     let current = value.as_text().unwrap_or_default();
+    let width = ui.available_width();
     match field.kind.as_str() {
         "enum" => {
             let options = field.options.iter().map(|o| (o.clone(), Value::text(o))).collect();
-            menu(ui, &field.name, current, options, set(path));
+            menu(ui, &field.name, current, options, set(path), width);
         }
-        "node_ref" => menu(ui, &field.name, current, id_options(ids), set(path)),
+        "node_ref" => {
+            menu(ui, &field.name, current, id_options(ids), set(path), width);
+        }
         "number" | "int" => number(ui, ui.make_persistent_id(&field.name), value.as_number(), path, state),
+        "bool" => {
+            // Sent on the click. There is no half-made state to hold on to the
+            // way a dragged number has one.
+            let mut on = matches!(value, Value::Bool(true));
+            if ui.checkbox(&mut on, "").changed() {
+                send(Edit::Set { path: path.to_vec(), value: Value::Bool(on) });
+            }
+        }
         _ => {
             ui.weak(format!("{value:?}"));
         }
@@ -236,19 +384,55 @@ fn name(ui: &mut egui::Ui, id: egui::Id, current: &str, path: Vec<Step>, state: 
 }
 
 /// A number, sent once it is let go of rather than as it moves — a solve per
-/// dragged pixel is not something Python can keep up with.
+/// dragged pixel is not something Python can keep up with. The view does follow
+/// it as it moves, without waiting for that; see [`pending`].
 fn number(ui: &mut egui::Ui, id: egui::Id, value: Option<f64>, path: &[Step], state: &mut PanelState) {
     let in_spec = value.unwrap_or_default();
-    let mut shown = match state.editing {
-        Some((editing, value)) if editing == id => value,
+    let mut shown = match &state.editing {
+        Some((editing, value, _)) if *editing == id => *value,
         _ => in_spec,
     };
-    let response = ui.add(egui::DragValue::new(&mut shown).speed(0.005).max_decimals(4));
+    let size = egui::vec2(ui.available_width(), ui.spacing().interact_size.y);
+    let response = ui.add_sized(size, egui::DragValue::new(&mut shown).speed(0.005).max_decimals(4));
     if response.dragged() || response.has_focus() {
-        state.editing = Some((id, shown));
+        state.editing = Some((id, shown, path.to_vec()));
     }
     if (response.drag_stopped() || response.lost_focus()) && shown != in_spec {
         send(Edit::Set { path: path.to_vec(), value: Value::Number(shown) });
+    }
+}
+
+/// `relation` as the number being dragged would leave it, when that number is
+/// one of its parameters.
+///
+/// What draws a drag before the spec carries it. Nothing more is sent for it:
+/// this is the value the control is already painting, and the spec that answers
+/// the end of the drag holds the same one, so the handover draws no step. A
+/// refused edit brings the old value back, as it does to the control.
+///
+/// A path naming anything else is left alone, so a number control added
+/// somewhere other than a relation previews nothing rather than the wrong
+/// relation.
+fn pending(relation: &Relation, index: usize, state: &PanelState) -> Option<Relation> {
+    let (_, value, path) = state.editing.as_ref()?;
+    let (at, name) = relation_param(path)?;
+    if at != index {
+        return None;
+    }
+    let mut dragged = relation.clone();
+    dragged.params.insert(name.to_owned(), Value::Number(*value));
+    Some(dragged)
+}
+
+/// The relation and the parameter a path addresses, where it addresses one.
+fn relation_param(path: &[Step]) -> Option<(usize, &str)> {
+    match path {
+        [Step::Key(relations), Step::Index(index), Step::Key(params), Step::Key(name)]
+            if relations == "relations" && params == "params" =>
+        {
+            Some((*index, name))
+        }
+        _ => None,
     }
 }
 
@@ -263,8 +447,10 @@ fn menu(
     current: &str,
     options: Vec<(String, Value)>,
     edit: impl Fn(Value) -> Edit,
-) {
+    width: f32,
+) -> egui::Response {
     egui::ComboBox::from_id_salt(salt)
+        .width(width)
         .selected_text(if current.is_empty() { "—" } else { current })
         .show_ui(ui, |ui| {
             for (label, value) in options {
@@ -272,7 +458,8 @@ fn menu(
                     send(edit(value));
                 }
             }
-        });
+        })
+        .response
 }
 
 fn set(path: &[Step]) -> impl Fn(Value) -> Edit {
@@ -390,5 +577,37 @@ mod tests {
             Value::map([("side", Value::text("positive_y"))]),
             "a required parameter was left out"
         );
+    }
+
+    /// A number under the pointer reaches the view where it has been dragged
+    /// to, not where the spec still has it, and reaches nothing else.
+    #[test]
+    fn a_dragged_number_is_drawn_before_the_spec_carries_it() {
+        let relation = Relation {
+            kind: "on".into(),
+            subject: "bowl".into(),
+            params: Params::from([("clearance_m".to_owned(), Value::Number(0.0))]),
+            ..Default::default()
+        };
+        let dragging = |path: Vec<Step>| PanelState {
+            editing: Some((egui::Id::new("clearance_m"), 0.08, path)),
+            ..PanelState::default()
+        };
+        let clearance_of = |index: usize| {
+            vec![
+                Step::from("relations"),
+                Step::from(index),
+                Step::from("params"),
+                Step::from("clearance_m"),
+            ]
+        };
+
+        let dragged = pending(&relation, 3, &dragging(clearance_of(3))).expect("the drag is this relation's");
+        assert_eq!(dragged.params["clearance_m"], Value::Number(0.08));
+        assert_eq!(relation.params["clearance_m"], Value::Number(0.0), "the spec was written to");
+
+        assert!(pending(&relation, 2, &dragging(clearance_of(3))).is_none(), "another relation's drag");
+        let elsewhere = vec![Step::from("objects"), Step::from(3usize), Step::from("id")];
+        assert!(pending(&relation, 3, &dragging(elsewhere)).is_none(), "not a relation parameter");
     }
 }

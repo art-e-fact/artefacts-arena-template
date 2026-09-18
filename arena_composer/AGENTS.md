@@ -115,6 +115,13 @@ Only `assets` may be absent from a message. Every one carries the whole editor h
 `editor::Form::take` has no half a message to piece together; and `viewer::apply_updates` drains the
 newest of *each* kind rather than simply the newest, since both can land in one frame.
 
+A layout's copy of the editor half is as old as the solve that produced it, though, so the panel is
+answered only by the messages that carry no layout. `view._draw` sends one behind every layout, read
+from the file with nothing awaited between the read and the write, and that is also what ends the
+spinner. A layout answers the panel in one place, `viewer::setup`, opening it on the first message.
+That is why the full payload still carries a spec at all: a packed payload run through
+`arena-viewer`, with no Python behind it, has no other message to fill the panel from.
+
 A refused edit is answered the same way with `solving: false`: the file did not change, so what goes
 back is that same spec carrying the reason. Re-resolving to say "no" would cost the seconds the edit
 was refused in.
@@ -135,6 +142,28 @@ so a value does not snap back between letting go of it and the spec carrying it 
 `PanOrbitCamera` claims a drag from the cursor position alone and knows nothing about the panel over
 it, so `keep_the_camera_off_the_panel` toggles `enabled` from `EguiWantsInput`, latched between
 drags: a drag that starts in the panel must not orbit, and one that leaves it must not stop.
+
+### Relation gizmos
+
+Hovering a relation in the panel draws what it asks for over the layout, and the eye toggle on
+each keeps it drawn (`src/editor/relations.rs`). The shapes are the ones Arena's loss strategies
+score (`isaaclab_arena/relations/relation_loss_strategies.py`) — the `on` footprint inset by its
+margin, `next_to`'s target face, `not_next_to`'s keep-out band, the limits around an object's
+*origin* — rebuilt in Arena's frame from `layout::Placed`, the assets last drawn, and
+`layout::world_aabb`, the reported local box under the solved pose. Two rules there: the reported
+box already carries `Object.scale`, so the pose's scale is not applied to it again; and a spec's
+params are read with the vocabulary's defaults behind them, the way the panel shows them. The
+gizmos are issued in egui's pass from the panel's own hover, on a gizmo group with
+`depth_bias = -1`, so a ring under a table or a rectangle on its top is not hidden by the surface.
+
+A number being dragged draws before it is sent. `PanelState::editing` already holds the value
+under the pointer, to paint the control with; it carries that value's spec path too, and
+`form::pending` lays it over the relation the gizmos are built from. So a parameter's shape
+follows the drag, while the object it is about stays where the last solve left it. The edit still
+goes out once, when the drag ends.
+
+`ARENA_VIEWER_SHOW_RELATIONS=all` (or `=2,5`, positions in the relations list) starts the viewer
+with those drawn — with `ARENA_VIEWER_SCREENSHOT`, the way to look at them without a pointer.
 
 `arena_composer.render` draws a packed scene from named views and writes a PNG each, in a
 child process that exits when it is done (`arena_composer.render_process` → `src/render.rs`).
