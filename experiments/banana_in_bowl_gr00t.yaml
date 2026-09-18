@@ -1,0 +1,58 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# GR00T N1.6 evaluation of banana_in_bowl, served over ZMQ on port 5555.
+#
+# Serve the DROID-post-trained checkpoint, not the base model. `oxe_droid` is a
+# post-training embodiment in N1.6: the base nvidia/GR00T-N1.6-3B ships modality
+# configs for behavior_r1_pro, gr1 and robocasa_panda_omron only, and asking it
+# for OXE_DROID raises `KeyError: 'oxe_droid'` after the weights have loaded.
+#
+#   python gr00t/eval/run_gr00t_server.py \
+#     --model-path nvidia/GR00T-N1.6-DROID --embodiment-tag OXE_DROID \
+#     --device cuda:0 --host 0.0.0.0 --port 5555
+#
+# Then, from the repo root:
+#
+#   source setup.sh
+#   export PYTHONPATH="$PWD/submodules/IsaacLab-Arena/submodules/Isaac-GR00T:$PYTHONPATH"
+#   python submodules/IsaacLab-Arena/isaaclab_arena/evaluation/experiment_runner.py \
+#     --experiment_config experiments/banana_in_bowl_gr00t.yaml
+#
+# The PYTHONPATH entry is required: the policy imports `gr00t.policy.server_client`
+# lazily inside its builder, so a missing GR00T source only fails once a rollout
+# starts. It needs pyzmq in the Arena venv; nothing else from GR00T.
+#
+# The server must run on a *different* GPU than the simulation. A policy server
+# resident on the same card leaves Isaac Sim too little memory to stream scene
+# geometry into its camera render products; the cameras then return a blank
+# background every frame, and the run reports a clean 0.0 success rate with no
+# error. Point `remote_host` at that machine.
+#
+# `enable_cameras` must be declared here: Hydra only overrides keys a config
+# already has, so setting it from the command line on a config that omits it
+# does nothing.
+#
+# The spec's embodiment is `droid_abs_joint_pos`. Its `external_camera_rgb` and
+# `wrist_camera_rgb` observations are zipped positionally onto the policy's
+# `exterior_image_1_left` and `wrist_image_left` video keys, so the order of
+# `pov_cam_name_sim` in the policy config matters.
+
+runs:
+  gr00t:
+    environment:
+      type: environments/tasks/banana_in_bowl.yaml
+      enable_cameras: true
+    policy:
+      type: isaaclab_arena_gr00t.policy.gr00t_remote_closedloop_policy.Gr00tRemoteClosedloopPolicy
+      policy_config_yaml_path: experiments/gr00t_droid_policy.yaml
+      policy_device: cuda:0
+      remote_host: 127.0.0.1
+      remote_port: 5555
+    environment_builder:
+      num_envs: 1
+      language_instruction: Pick up the banana and place it in the bowl.
+    rollout_limit:
+      num_episodes: 3
