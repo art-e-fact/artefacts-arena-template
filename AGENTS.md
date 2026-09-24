@@ -26,6 +26,8 @@ arena-view environments/tasks/banana_in_bowl.yaml   # resolve a layout and look 
   the Bevy viewer, the headless renderer, the MCP server. Read
   [arena_composer/AGENTS.md](arena_composer/AGENTS.md) before changing any of it.
 - `bin/arena-mcp`, `.mcp.json`, `.vscode/`, `.cursor/` — how an agent's client starts the MCP server.
+- `artefacts.yaml`, `bin/artefacts-experiment` — Experiments as Artefacts jobs: `artefacts run <job>`
+  uploads each Experiment's report, camera videos and a JUnit verdict to the dashboard.
 - `skills/` — recurring multi-step workflows as Agent Skills. When a task matches one, invoke it
   instead of re-deriving the procedure from this file.
 - `submodules/IsaacLab-Arena` — Arena and Isaac Lab, and the venv `setup.sh` installs this repo into.
