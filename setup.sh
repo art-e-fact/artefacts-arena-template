@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Host (non-Docker) environment for this Arena project.
 #
-# Syncs IsaacLab-Arena's uv venv (Isaac Lab + Arena), installs this repo's
-# packages editable into it, then activates that venv in the current shell.
+# Syncs IsaacLab-Arena's uv venv (Isaac Lab, Arena, the GR00T policy client),
+# installs this repo's packages editable into it, then activates that venv in
+# the current shell.
 #
 # Must be sourced so activation sticks:
 #   source ./setup.sh
@@ -20,7 +21,9 @@
 
 _setup_main() {
   local REPO_ROOT ARENA_DIR VENV_DIR FORCE=false WHEEL=false
-  local UV_SYNC_ARGS=()
+  # gr00t-client: the Isaac-GR00T source plus pyzmq, pinned by Arena's lockfile,
+  # which Gr00tRemoteClosedloopPolicy needs to reach a GR00T server.
+  local UV_SYNC_ARGS=(--group gr00t-client)
 
   # Resolve repo root whether sourced or executed.
   if [[ -n "${BASH_SOURCE[0]:-}" ]]; then
@@ -36,7 +39,7 @@ _setup_main() {
       --wheel) WHEEL=true ;;
       --force) FORCE=true ;;
       -h|--help)
-        sed -n '2,19p' "${BASH_SOURCE[0]:-$0}" | sed 's/^# \?//'
+        sed -n '2,20p' "${BASH_SOURCE[0]:-$0}" | sed 's/^# \?//'
         return 0
         ;;
       *)
@@ -64,11 +67,13 @@ _setup_main() {
   fi
 
   if [[ "${WHEEL}" == true ]]; then
-    UV_SYNC_ARGS=(--no-default-groups --group isaaclab-from-wheel)
+    UV_SYNC_ARGS+=(--no-default-groups --group isaaclab-from-wheel)
   fi
 
-  # Sync on first use, when --force, or when switching to the wheel flavor.
-  if [[ "${FORCE}" == true || "${WHEEL}" == true || ! -x "${VENV_DIR}/bin/python" ]]; then
+  # Sync on first use, when --force, when switching to the wheel flavor, or when
+  # the GR00T client is missing: any uv sync without that group removes it.
+  if [[ "${FORCE}" == true || "${WHEEL}" == true || ! -x "${VENV_DIR}/bin/python" ]] ||
+    ! "${VENV_DIR}/bin/python" -c 'import gr00t.policy.server_client' 2>/dev/null; then
     echo "setup.sh: syncing Arena environment in ${ARENA_DIR} ..."
     (cd "${ARENA_DIR}" && uv sync "${UV_SYNC_ARGS[@]}") || return 1
   else

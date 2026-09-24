@@ -17,13 +17,12 @@
 # Then, from the repo root:
 #
 #   source setup.sh
-#   export PYTHONPATH="$PWD/submodules/IsaacLab-Arena/submodules/Isaac-GR00T:$PYTHONPATH"
 #   python submodules/IsaacLab-Arena/isaaclab_arena/evaluation/experiment_runner.py \
 #     --experiment_config experiments/banana_in_bowl_gr00t.yaml
 #
-# The PYTHONPATH entry is required: the policy imports `gr00t.policy.server_client`
-# lazily inside its builder, so a missing GR00T source only fails once a rollout
-# starts. It needs pyzmq in the Arena venv; nothing else from GR00T.
+# `setup.sh` installs the GR00T client through Arena's `gr00t-client` group. The
+# policy imports it lazily inside its builder, so without it a run fails only once
+# a rollout starts.
 #
 # The server must run on a *different* GPU than the simulation. A policy server
 # resident on the same card leaves Isaac Sim too little memory to stream scene
