@@ -168,6 +168,9 @@ outcome*.
 - Use Arena's `setup-arena` for installation or runtime repair, and `run-tests` for pytest.
 - Use an OSMO submission workflow for cluster runs. An unqualified request to "run" an Experiment
   means local execution.
+- Use `artefacts run <job>` from `artefacts.yaml` to put an Experiment on the Artefacts dashboard.
+  Its scenarios call `bin/artefacts-experiment`, which adds the videos, a JUnit verdict per
+  episode and a blank-camera check to the runner's report.
 
 ## References
 

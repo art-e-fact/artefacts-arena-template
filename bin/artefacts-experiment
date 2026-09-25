@@ -1,0 +1,188 @@
+#!/usr/bin/env python3
+"""Run an Arena Experiment as an Artefacts scenario and leave behind what the dashboard reads.
+
+    bin/artefacts-experiment experiments/<name>.yaml --timeout MIN [--policy_server HOST:PORT]
+        [--metrics PATH] [runner flags | Hydra overrides]...
+
+Everything lands in $ARTEFACTS_SCENARIO_UPLOAD_DIR, which Artefacts uploads after the run: the
+Experiment Runner's report (index.html, report/), one folder per Run with its camera videos and
+episode results, tests_junit.xml and metrics.json.
+
+Artefacts ignores exit codes and passes a run that leaves no tests_junit.xml, so one is written on
+every path, a crash included. It holds one suite per Run and one case per episode, which fails
+when the episode did not succeed. A failed Run is an error. A camera video with no scene in it
+fails too: a render starved of GPU memory looks like a clean policy miss otherwise.
+
+Stdlib only, so it runs under any python3; the runner itself runs in the venv setup.sh activates.
+"""
+
+import argparse
+import json
+import os
+import shlex
+import signal
+import socket
+import subprocess
+import sys
+import xml.etree.ElementTree as ET
+from contextlib import suppress
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+RUNNER = "submodules/IsaacLab-Arena/isaaclab_arena/evaluation/experiment_runner.py"
+# A starved render returns a uniform background, pixel range 0-1 over the whole video;
+# a rendered scene spans more than 200 of 255.
+MIN_PIXEL_RANGE = 32
+
+
+def run_experiment(experiment: str, extra: list[str], out: Path, timeout_s: float) -> int | None:
+    """Return the runner's exit code, or ``None`` when it was killed on timeout."""
+    # User flags come last so they win, e.g. `--viz kit` to watch a scenario.
+    cmd = ["python", RUNNER, "--experiment_config", experiment, "--experiment_output_directory", str(out),
+           "--viz", "none", "--record_camera_video", "--continue_on_error", *extra]  # fmt: skip
+    # FORCE_EXIT skips Kit's app.close(), which can hang after the results are written. Unbuffered,
+    # because stdout is the Artefacts client's pipe: buffered, progress arrives minutes late.
+    env = {**os.environ, "ISAACLAB_ARENA_FORCE_EXIT_ON_COMPLETE": "1", "PYTHONUNBUFFERED": "1"}
+    # One string, not `bash -c ... "$@"`: `source` would hand setup.sh those arguments, and it rejects them.
+    shell = f"source setup.sh > /dev/null && exec {shlex.join(cmd)}"
+    # Own process group, so the kill below also reaches Kit's helper processes.
+    proc = subprocess.Popen(["bash", "-c", shell], cwd=REPO_ROOT, env=env, start_new_session=True)
+    try:
+        return proc.wait(timeout=timeout_s)
+    except subprocess.TimeoutExpired:
+        return None
+    finally:
+        # Also on Ctrl+C, which no longer reaches a separate session. SIGKILL: Kit handles SIGTERM itself.
+        with suppress(ProcessLookupError):
+            os.killpg(proc.pid, signal.SIGKILL)
+        proc.wait()
+
+
+def pixel_range(video: Path) -> int:
+    """Grey-level range over every frame of ``video``, downscaled to 64x64."""
+    cmd = ["ffmpeg", "-v", "error", "-i", str(video), "-vf", "scale=64:64", "-pix_fmt", "gray", "-f", "rawvideo", "-"]
+    raw = subprocess.run(cmd, capture_output=True, check=True).stdout
+    return max(raw) - min(raw) if raw else 0
+
+
+def judge(upload: Path, ended: str) -> tuple[dict, dict]:
+    """Return ``({suite: [(case, kind, message)]}, numeric metrics)``; kind is None, "failure" or "error"."""
+    result_path = upload / "arena_experiment_result.json"
+    if not result_path.exists():
+        message = f"experiment_runner.py {ended} before writing its results; see test_process_log.txt"
+        return {"experiment": [("experiment_runner", "error", message)]}, {}
+
+    suites, metrics = {}, {}
+    for run, result in json.loads(result_path.read_text())["runs"].items():
+        cases = []
+        if result["status"] != "completed":
+            cases.append(("run", "error", f"Run {result['status']}; see test_process_log.txt"))
+
+        episodes = []
+        for rebuild in result["rebuilds"]:
+            for episode in rebuild["episodes"]:
+                episodes.append(episode)
+                progress = episode.get("progress") or {}
+                objectives = progress.get("objectives", {}).values()
+                # A completed objective's active predicate is None.
+                stalled = [p for o in objectives for p in o.get("active_predicates", {}).values() if p]
+                message = f"progress {progress.get('overall_score', 0):.2f}"
+                message += f", stalled at {', '.join(stalled)}" if stalled else ""
+                # Named like the episode's videos: robot-cam-rebuild0-env0-<camera>-episode-0.mp4
+                name = f"rebuild{rebuild['index']}-env{episode['env_id']}-episode-{episode['episode_in_env']}"
+                cases.append((name, None if episode["success"] else "failure", message))
+
+        videos = sorted((upload / run).glob("*.mp4"))
+        if videos:
+            try:
+                blank = [video.name for video in videos if pixel_range(video) < MIN_PIXEL_RANGE]
+                message = f"no scene in {', '.join(blank)}: the success rate is not meaningful" if blank else ""
+            except (OSError, subprocess.CalledProcessError) as error:
+                blank, message = True, f"could not decode the videos: {error}"
+            cases.append(("cameras_rendered", "failure" if blank else None, message))
+
+        if episodes:
+            metrics[f"{run}.success_rate"] = sum(bool(e["success"]) for e in episodes) / len(episodes)
+            metrics[f"{run}.mean_progress"] = sum(
+                (e.get("progress") or {}).get("overall_score", 0) for e in episodes
+            ) / len(episodes)
+            metrics[f"{run}.episodes"] = len(episodes)
+        suites[run] = cases
+    return suites, metrics
+
+
+def write_junit(path: Path, suites: dict) -> None:
+    root = ET.Element("testsuites")
+    for suite_name, cases in suites.items():
+        kinds = [kind for _, kind, _ in cases]
+        suite = ET.SubElement(root, "testsuite", name=suite_name, tests=str(len(cases)),
+                              failures=str(kinds.count("failure")), errors=str(kinds.count("error")))  # fmt: skip
+        for name, kind, message in cases:
+            case = ET.SubElement(suite, "testcase", classname=suite_name, name=name)
+            if kind:
+                ET.SubElement(case, kind, message=message)
+            elif message:
+                ET.SubElement(case, "system-out").text = message
+    ET.indent(root)
+    ET.ElementTree(root).write(path, encoding="utf-8", xml_declaration=True)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter, allow_abbrev=False
+    )
+    parser.add_argument("experiment", help="Experiment config, relative to the repo root.")
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        required=True,
+        help="Minutes before the runner is killed. A local `artefacts run` does not enforce the job's `timeout:`.",
+    )
+    parser.add_argument(
+        "--policy_server",
+        metavar="HOST:PORT",
+        help="Fail at once when nothing listens there: the GR00T and openpi clients wait forever for a missing server.",
+    )
+    parser.add_argument(
+        "--metrics",
+        type=Path,
+        help="Also write metrics.json here: artefacts.yaml's `metrics:` is a fixed path, the upload dir is new each run.",
+    )
+    args, extra = parser.parse_known_args()
+    upload = Path(os.environ["ARTEFACTS_SCENARIO_UPLOAD_DIR"])
+    if args.metrics:
+        args.metrics.unlink(missing_ok=True)  # never report the previous scenario's numbers
+
+    suites = {"experiment": [("artefacts-experiment", "error", "crashed; see the traceback in test_process_log.txt")]}
+    metrics = {}
+    try:
+        if args.policy_server:
+            host, port = args.policy_server.rsplit(":", 1)
+            try:
+                socket.create_connection((host, int(port)), timeout=5).close()
+            except OSError as error:
+                message = f"no policy server at {args.policy_server} ({error}); start it before the job"
+                suites = {"experiment": [("policy_server", "error", message)]}
+                return 1
+
+        # The runner needs its exact output directory missing or empty, and the upload dir already
+        # holds Artefacts' test_process_log.txt, so it writes one level down and is lifted up after.
+        staging = upload / "arena_experiment"
+        returncode = run_experiment(args.experiment, extra, staging, args.timeout * 60)
+        if staging.is_dir():
+            for path in staging.iterdir():
+                path.rename(upload / path.name)
+            staging.rmdir()
+        ended = f"was killed after {args.timeout:g} min" if returncode is None else f"exited with {returncode}"
+        suites, metrics = judge(upload, ended)
+    finally:
+        write_junit(upload / "tests_junit.xml", suites)
+        for path in filter(None, [upload / "metrics.json", args.metrics]):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
+        print(f"[artefacts-experiment] {metrics}", flush=True)
+    return 1 if any(kind for cases in suites.values() for _, kind, _ in cases) else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

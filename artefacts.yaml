@@ -1,0 +1,65 @@
+project: artefacts/artefacts-arena-template
+
+version: 0.1.0
+
+# One job per policy, one scenario per Experiment config under experiments/. Start the job's
+# policy server first, then from the repo root:
+#
+#   artefacts run gr00t
+#
+# bin/artefacts-experiment runs the Experiment and leaves the report (index.html), the camera
+# videos, tests_junit.xml and metrics.json at the top of the scenario's upload dir.
+#
+# `metrics:` is read after the run from a fixed path relative to the repo root (outputs/ is
+# gitignored), so the wrapper writes a copy there. `2>&1` is required: the client reads a
+# command's stdout to the end before its stderr, so a command that fills the stderr pipe first
+# blocks forever.
+#
+# `package` is a placeholder. `other` + `isaac_sim` has no Artefacts base image, and the config
+# validator requires a package block without one; a local run builds nothing. A local run does not
+# enforce `timeout` either, so the wrapper's `--timeout` repeats it and kills a hung run.
+
+jobs:
+  gr00t:
+    type: test
+    timeout: 30 # minutes
+    package:
+      docker:
+        build:
+          dockerfile: empty
+    runtime:
+      framework: other
+      simulator: isaac_sim
+    scenarios:
+      defaults:
+        metrics: outputs/artefacts_metrics.json
+        run: >-
+          bin/artefacts-experiment "$EXPERIMENT" --timeout 30 --policy_server 127.0.0.1:5555
+          --metrics outputs/artefacts_metrics.json 2>&1
+      # Needs nvidia/GR00T-N1.6-DROID served on 127.0.0.1:5555; see the Experiment config.
+      settings:
+        - name: banana_in_bowl
+          params: {EXPERIMENT: experiments/banana_in_bowl_gr00t.yaml}
+
+  openpi:
+    type: test
+    timeout: 30 # minutes
+    package:
+      docker:
+        build:
+          dockerfile: empty
+    runtime:
+      framework: other
+      simulator: isaac_sim
+    scenarios:
+      defaults:
+        metrics: outputs/artefacts_metrics.json
+        run: >-
+          bin/artefacts-experiment "$EXPERIMENT" --timeout 30 --policy_server 127.0.0.1:8000
+          --metrics outputs/artefacts_metrics.json 2>&1
+      # Needs the pi05 openpi server on 127.0.0.1:8000; see the Experiment config. The server
+      # (~8.5 GB) and a rendering Isaac Sim do not fit on one 16 GB GPU: the cameras come back
+      # blank. Run this job where the server has its own GPU.
+      settings:
+        - name: banana_in_bowl
+          params: {EXPERIMENT: experiments/banana_in_bowl_openpi.yaml}
