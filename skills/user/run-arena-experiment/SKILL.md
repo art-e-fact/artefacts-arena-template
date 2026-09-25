@@ -146,12 +146,10 @@ Experiment unless asked to stop it.
 Two things stay this project's responsibility:
 
 - **Client imports.** A GR00T Run imports `gr00t.policy.server_client` lazily inside the policy
-  builder, so a missing GR00T source passes every startup check and fails only once a rollout
-  begins. Put the Isaac-GR00T source on `PYTHONPATH` and install `pyzmq` into the Arena venv:
-
-  ```bash
-  export PYTHONPATH="$PWD/submodules/IsaacLab-Arena/submodules/Isaac-GR00T:$PYTHONPATH"
-  ```
+  builder, so a missing client passes every startup check and fails only once a rollout begins.
+  `setup.sh` installs it through Arena's `gr00t-client` group, and re-syncs when it is missing.
+  A `uv sync` or `uv run` inside `submodules/IsaacLab-Arena` removes it again; source `setup.sh`
+  after one.
 
 - **Policy config paths.** A policy's `policy_config_yaml_path`, and the joint-space paths inside
   that file, resolve against the working directory and are asserted to exist. Arena's own copies
