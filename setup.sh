@@ -12,10 +12,14 @@
 # Options (pass after sourcing, e.g. `source ./setup.sh --wheel`):
 #   --wheel   Use Arena's isaaclab-from-wheel group instead of from-source
 #   --force   Re-run uv sync even if the venv already exists
+#   --pinned  Install the pinned arena-composer release, ignoring ARENA_COMPOSER_SRC
 #   -h/--help Show this help
 #
-# ARENA_COMPOSER_SRC=<checkout> installs that checkout of arena-composer
-# editable instead of the pinned wheel, for working on the composer itself.
+# To work on arena-composer itself, name a checkout of it in .env (gitignored,
+# one per checkout of this repo; a relative path is relative to the repo root):
+#   ARENA_COMPOSER_SRC=~/repos/arena-composer
+# Every run then installs that checkout editable, rebuilding its Rust part when
+# it changed. ARENA_COMPOSER_SRC in the environment overrides .env for one run.
 #
 # Requires uv (https://docs.astral.sh/uv/), gh (https://cli.github.com/ — the
 # wheel is a GitHub Release asset), the Arena submodule, and a Rust toolchain
@@ -23,7 +27,7 @@
 #   git submodule update --init --recursive
 
 _setup_main() {
-  local REPO_ROOT ARENA_DIR VENV_DIR WHEEL_DIR FORCE=false WHEEL=false
+  local REPO_ROOT ARENA_DIR VENV_DIR WHEEL_DIR COMPOSER_SRC FORCE=false WHEEL=false PINNED=false
   # The arena-composer release to install, from art-e-fact/arena-composer.
   # It moves together with the Arena submodule.
   local ARENA_COMPOSER_VERSION=0.2.0
@@ -45,8 +49,9 @@ _setup_main() {
     case "$1" in
       --wheel) WHEEL=true ;;
       --force) FORCE=true ;;
+      --pinned) PINNED=true ;;
       -h|--help)
-        sed -n '2,23p' "${BASH_SOURCE[0]:-$0}" | sed 's/^# \?//'
+        sed -n '2,28p' "${BASH_SOURCE[0]:-$0}" | sed 's/^# \?//'
         return 0
         ;;
       *)
@@ -85,14 +90,24 @@ _setup_main() {
   # arena-composer (arena-view, arena-mcp, ...) goes into Arena's venv with uv
   # pip, since uv venvs ship no pip. Arena's lockfile does not list it, so a
   # sync removes it: this runs after the sync, every time.
-  if [[ -n "${ARENA_COMPOSER_SRC:-}" ]]; then
-    # Cargo builds the viewer: minutes on a cold cache, seconds afterwards.
+  #
+  # First match wins: --pinned, ARENA_COMPOSER_SRC in the environment, then in
+  # .env. .env is read in a subshell, so nothing else in it reaches the caller.
+  # The path is resolved without checking it exists, so a wrong one fails the
+  # install rather than falling back to the release.
+  if [[ "${PINNED}" == false ]]; then
+    COMPOSER_SRC="${ARENA_COMPOSER_SRC:-$(cd "${REPO_ROOT}" && [[ -f .env ]] && . ./.env &&
+      [[ -n "${ARENA_COMPOSER_SRC:-}" ]] && realpath -m -- "${ARENA_COMPOSER_SRC}")}"
+  fi
+  if [[ -n "${COMPOSER_SRC}" ]]; then
+    # uv rebuilds a local package on every install: about a second when nothing
+    # changed, minutes for cargo on a cold cache.
     if ! command -v cargo >/dev/null 2>&1; then
       echo "setup.sh: cargo not found on PATH; ARENA_COMPOSER_SRC needs it. Install: https://rustup.rs/" >&2
       return 1
     fi
-    echo "setup.sh: installing arena-composer editable from ${ARENA_COMPOSER_SRC} ..."
-    uv pip install --python "${VENV_DIR}/bin/python" -e "${ARENA_COMPOSER_SRC}" || return 1
+    echo "setup.sh: installing arena-composer editable from ${COMPOSER_SRC} ..."
+    uv pip install -q --python "${VENV_DIR}/bin/python" -e "${COMPOSER_SRC}" || return 1
   # Not installed, another version, or editable from an earlier
   # ARENA_COMPOSER_SRC run: install the pinned wheel.
   elif "${VENV_DIR}/bin/python" -c "

@@ -25,8 +25,8 @@ arena-view environments/tasks/banana_in_bowl.yaml   # resolve a layout and look 
   disjoint union: a key lives in one file or the other, never both.
 - `setup.sh` — pins the arena-composer release it installs. The composer imports private Arena
   functions, so a release is tested against one Arena commit: bump the pin and the submodule
-  together. A change to the composer itself belongs in its repo;
-  `ARENA_COMPOSER_SRC=<checkout> source setup.sh` installs that checkout editable instead.
+  together. A change to the composer itself belongs in its repo: `ARENA_COMPOSER_SRC=<checkout>` in
+  `.env` makes `setup.sh` install that checkout editable instead, and `--pinned` ignores it.
 - `bin/arena-mcp`, `.mcp.json`, `.vscode/mcp.json`, `.cursor/mcp.json` — how an agent's client starts
   the MCP server. `arena-composer init` writes them: change its templates in arena-composer, then
   delete the files and run it in a `source setup.sh` shell, rather than editing them here.
