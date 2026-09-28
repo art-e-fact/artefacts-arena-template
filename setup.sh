@@ -2,8 +2,8 @@
 # Host (non-Docker) environment for this Arena project.
 #
 # Syncs IsaacLab-Arena's uv venv (Isaac Lab, Arena, the GR00T policy client),
-# installs this repo's packages editable into it, then activates that venv in
-# the current shell.
+# installs arena-composer into it at the version pinned below, then activates
+# that venv in the current shell.
 #
 # Must be sourced so activation sticks:
 #   source ./setup.sh
@@ -14,13 +14,19 @@
 #   --force   Re-run uv sync even if the venv already exists
 #   -h/--help Show this help
 #
-# Requires uv (https://docs.astral.sh/uv/), a Rust toolchain (arena_composer is
-# a maturin project — the Bevy viewer is compiled on install, which takes a few
-# minutes the first time), and the Arena submodule:
+# ARENA_COMPOSER_SRC=<checkout> installs that checkout of arena-composer
+# editable instead of the pinned wheel, for working on the composer itself.
+#
+# Requires uv (https://docs.astral.sh/uv/), gh (https://cli.github.com/ — the
+# wheel is a GitHub Release asset), the Arena submodule, and a Rust toolchain
+# only with ARENA_COMPOSER_SRC:
 #   git submodule update --init --recursive
 
 _setup_main() {
-  local REPO_ROOT ARENA_DIR VENV_DIR FORCE=false WHEEL=false
+  local REPO_ROOT ARENA_DIR VENV_DIR WHEEL_DIR FORCE=false WHEEL=false
+  # The arena-composer release to install, from art-e-fact/arena-composer.
+  # It moves together with the Arena submodule.
+  local ARENA_COMPOSER_VERSION=0.2.0
   # gr00t-client: the Isaac-GR00T source plus pyzmq, pinned by Arena's lockfile,
   # which Gr00tRemoteClosedloopPolicy needs to reach a GR00T server.
   local UV_SYNC_ARGS=(--group gr00t-client)
@@ -33,13 +39,14 @@ _setup_main() {
   fi
   ARENA_DIR="${REPO_ROOT}/submodules/IsaacLab-Arena"
   VENV_DIR="${ARENA_DIR}/.venv"
+  WHEEL_DIR="${XDG_CACHE_HOME:-${HOME}/.cache}/arena-composer/wheels/v${ARENA_COMPOSER_VERSION}"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --wheel) WHEEL=true ;;
       --force) FORCE=true ;;
       -h|--help)
-        sed -n '2,20p' "${BASH_SOURCE[0]:-$0}" | sed 's/^# \?//'
+        sed -n '2,23p' "${BASH_SOURCE[0]:-$0}" | sed 's/^# \?//'
         return 0
         ;;
       *)
@@ -61,11 +68,6 @@ _setup_main() {
     return 1
   fi
 
-  if ! command -v cargo >/dev/null 2>&1; then
-    echo "setup.sh: cargo not found on PATH. Install: https://rustup.rs/" >&2
-    return 1
-  fi
-
   if [[ "${WHEEL}" == true ]]; then
     UV_SYNC_ARGS+=(--no-default-groups --group isaaclab-from-wheel)
   fi
@@ -80,15 +82,34 @@ _setup_main() {
     echo "setup.sh: Arena venv already present (pass --force to re-sync)"
   fi
 
-  # uv venvs do not ship pip; install into Arena's env with uv pip.
-  # This compiles the Bevy viewer (see arena_composer/Cargo.toml) — minutes on
-  # a cold cargo cache, seconds afterwards.
-  if [[ -f "${REPO_ROOT}/arena_composer/pyproject.toml" ]]; then
-    echo "setup.sh: installing arena_composer (editable, builds the viewer) ..."
-    uv pip install --python "${VENV_DIR}/bin/python" \
-      -e "${REPO_ROOT}/arena_composer" || return 1
+  # arena-composer (arena-view, arena-mcp, ...) goes into Arena's venv with uv
+  # pip, since uv venvs ship no pip. Arena's lockfile does not list it, so a
+  # sync removes it: this runs after the sync, every time.
+  if [[ -n "${ARENA_COMPOSER_SRC:-}" ]]; then
+    # Cargo builds the viewer: minutes on a cold cache, seconds afterwards.
+    if ! command -v cargo >/dev/null 2>&1; then
+      echo "setup.sh: cargo not found on PATH; ARENA_COMPOSER_SRC needs it. Install: https://rustup.rs/" >&2
+      return 1
+    fi
+    echo "setup.sh: installing arena-composer editable from ${ARENA_COMPOSER_SRC} ..."
+    uv pip install --python "${VENV_DIR}/bin/python" -e "${ARENA_COMPOSER_SRC}" || return 1
+  # Not installed, another version, or editable from an earlier
+  # ARENA_COMPOSER_SRC run: install the pinned wheel.
+  elif "${VENV_DIR}/bin/python" -c "
+import importlib.metadata as m, json, sys
+d = m.distribution('arena-composer')
+editable = json.loads(d.read_text('direct_url.json') or '{}').get('dir_info', {}).get('editable', False)
+sys.exit(d.version != '${ARENA_COMPOSER_VERSION}' or editable)" 2>/dev/null; then
+    echo "setup.sh: arena-composer ${ARENA_COMPOSER_VERSION} already installed"
   else
-    echo "setup.sh: no arena_composer/pyproject.toml — skipping project install"
+    if ! command -v gh >/dev/null 2>&1; then
+      echo "setup.sh: gh not found on PATH. Install: https://cli.github.com/" >&2
+      return 1
+    fi
+    echo "setup.sh: installing arena-composer ${ARENA_COMPOSER_VERSION} ..."
+    gh release download "v${ARENA_COMPOSER_VERSION}" -R art-e-fact/arena-composer \
+      -p '*.whl' -D "${WHEEL_DIR}" --clobber || return 1
+    uv pip install --python "${VENV_DIR}/bin/python" "${WHEEL_DIR}"/*.whl || return 1
   fi
 
   # shellcheck disable=SC1091
@@ -96,13 +117,6 @@ _setup_main() {
 
   export OMNI_KIT_ACCEPT_EULA=YES
   export ACCEPT_EULA=Y
-  export ARENA_PROJECT_ROOT="${REPO_ROOT}"
-  # Console scripts do not put cwd on sys.path, so repo-root packages are not
-  # importable from them unless the repo root is on PYTHONPATH.
-  case ":${PYTHONPATH:-}:" in
-    *":${REPO_ROOT}:"*) ;;
-    *) export PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}" ;;
-  esac
 
   cd "${REPO_ROOT}" || return 1
 
