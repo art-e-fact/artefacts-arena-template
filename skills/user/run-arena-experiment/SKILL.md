@@ -92,8 +92,8 @@ source setup.sh && python submodules/IsaacLab-Arena/isaaclab_arena/evaluation/ex
   <override>...
 ```
 
-`setup.sh` must be sourced in the same command, not relied on from a previous shell: it exports the
-EULA acceptance, `PYTHONPATH` and `ARENA_PROJECT_ROOT` that the runner needs.
+`setup.sh` must be sourced in the same command, not relied on from a previous shell: it activates
+Arena's venv and exports the EULA acceptance that the runner needs.
 
 ## Execute and monitor
 

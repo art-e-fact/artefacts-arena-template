@@ -1,9 +1,10 @@
 # artefacts-arena-template
 
-An Isaac Lab Arena project: environment specs under `environments/`, and the tooling that
-resolves and draws them under `arena_composer/`.
+An Isaac Lab Arena project: environment specs under `environments/`, and the Experiments that run
+them. The tooling that resolves and draws a spec — `arena-view`, `arena-mcp` — is the
+[arena-composer](https://github.com/art-e-fact/arena-composer) package, which `setup.sh` installs.
 
- - Run shells with `source setup.sh`. This sets up EULA, PYTHONPATH and ARENA_PROJECT_ROOT exports.
+ - Run shells with `source setup.sh`. It activates Arena's venv and accepts the Isaac Sim EULA.
  - /submodules/* are third-party. Don't edit them unless the user asks you to.  
  - Keep the implementation as concise and readable as possible. Add short comments where they help the
    understanding.  
@@ -22,17 +23,19 @@ arena-view environments/tasks/banana_in_bowl.yaml   # resolve a layout and look 
 
 - `environments/` — the specs. A task includes its scene through `external_yaml`, and the two are a
   disjoint union: a key lives in one file or the other, never both.
-- `arena_composer/` — everything that resolves a spec and draws it: Arena and the placement solver,
-  the Bevy viewer, the headless renderer, the MCP server. Read
-  [arena_composer/AGENTS.md](arena_composer/AGENTS.md) before changing any of it.
+- `setup.sh` — pins the arena-composer release it installs. The composer imports private Arena
+  functions, so a release is tested against one Arena commit: bump the pin and the submodule
+  together. A change to the composer itself belongs in its repo;
+  `ARENA_COMPOSER_SRC=<checkout> source setup.sh` installs that checkout editable instead.
 - `bin/arena-mcp`, `.mcp.json`, `.vscode/mcp.json`, `.cursor/mcp.json` — how an agent's client starts
-  the MCP server. `arena-composer init` writes them: change its templates in `arena_composer`, then
+  the MCP server. `arena-composer init` writes them: change its templates in arena-composer, then
   delete the files and run it in a `source setup.sh` shell, rather than editing them here.
 - `artefacts.yaml`, `bin/artefacts-experiment` — Experiments as Artefacts jobs: `artefacts run <job>`
   uploads each Experiment's report, camera videos and a JUnit verdict to the dashboard.
 - `skills/` — recurring multi-step workflows as Agent Skills. When a task matches one, invoke it
   instead of re-deriving the procedure from this file.
-- `submodules/IsaacLab-Arena` — Arena and Isaac Lab, and the venv `setup.sh` installs this repo into.
+- `submodules/IsaacLab-Arena` — Arena and Isaac Lab, and the venv `setup.sh` installs arena-composer
+  into.
 
 ## Skills
 

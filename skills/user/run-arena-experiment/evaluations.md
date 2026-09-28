@@ -18,7 +18,7 @@ Known failure modes:
 
 - Reports the process exit code instead of the Run status.
 - Treats the zero success rate as a failure of the spec.
-- Runs the runner without sourcing `setup.sh`, losing the EULA and `PYTHONPATH` exports.
+- Runs the runner without sourcing `setup.sh`, losing Arena's venv and the EULA export.
 
 ## Scenario 2: Override Without Editing The Config
 
