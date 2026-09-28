@@ -25,7 +25,9 @@ arena-view environments/tasks/banana_in_bowl.yaml   # resolve a layout and look 
 - `arena_composer/` — everything that resolves a spec and draws it: Arena and the placement solver,
   the Bevy viewer, the headless renderer, the MCP server. Read
   [arena_composer/AGENTS.md](arena_composer/AGENTS.md) before changing any of it.
-- `bin/arena-mcp`, `.mcp.json`, `.vscode/`, `.cursor/` — how an agent's client starts the MCP server.
+- `bin/arena-mcp`, `.mcp.json`, `.vscode/mcp.json`, `.cursor/mcp.json` — how an agent's client starts
+  the MCP server. `arena-composer init` writes them: change its templates in `arena_composer`, then
+  delete the files and run it in a `source setup.sh` shell, rather than editing them here.
 - `artefacts.yaml`, `bin/artefacts-experiment` — Experiments as Artefacts jobs: `artefacts run <job>`
   uploads each Experiment's report, camera videos and a JUnit verdict to the dashboard.
 - `skills/` — recurring multi-step workflows as Agent Skills. When a task matches one, invoke it
@@ -43,13 +45,3 @@ and `.claude/skills` symlinks to `.agents/skills`. Both are committed. Adding, r
 skill means updating the canonical source and its alias together, or a client silently stops seeing
 it. This mirrors the layout in `submodules/IsaacLab-Arena`, whose skills are usable from here and
 are written against that submodule as their repository root.
-
-## Starting the MCP server
-
-`bin/arena-mcp` is the launcher every client config points at. It re-makes `setup.sh`'s exports,
-because a client starts a server with a stripped environment, and finds the repo from its own path,
-so a client that is not at the repo root still works. `.mcp.json` walks up from the working directory
-to find it: Claude Code runs a server from wherever `claude` was started, and does not expand
-`CLAUDE_PROJECT_DIR` in the command. VS Code and Cursor have `${workspaceFolder}` and use it directly.
-
-The server itself lives in `arena_composer/`, and documents its own tools — see that AGENTS.md.

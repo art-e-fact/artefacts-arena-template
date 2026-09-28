@@ -6,6 +6,7 @@ __pycache__/
 
 # Rust / maturin
 target/
+dist/
 *.abi3.so
 
 .venv/
