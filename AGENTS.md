@@ -48,3 +48,9 @@ and `.claude/skills` symlinks to `.agents/skills`. Both are committed. Adding, r
 skill means updating the canonical source and its alias together, or a client silently stops seeing
 it. This mirrors the layout in `submodules/IsaacLab-Arena`, whose skills are usable from here and
 are written against that submodule as their repository root.
+
+`author-arena-spec`, for writing and repairing specs with the arena MCP server, comes from
+arena-composer instead. `arena-composer init`, which `setup.sh` runs, links it into `.agents/skills/`
+from the installed package, so it is the installed release's own, or the editable checkout's. The
+link points into the venv or that checkout, so it is not committed. Change the skill in
+arena-composer.

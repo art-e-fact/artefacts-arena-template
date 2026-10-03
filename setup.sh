@@ -127,6 +127,10 @@ sys.exit(d.version != '${ARENA_COMPOSER_VERSION}' or editable)" 2>/dev/null; the
     uv pip install --python "${VENV_DIR}/bin/python" "${WHEEL_DIR}"/*.whl || return 1
   fi
 
+  # Links the skills arena-composer ships into .agents/skills/, from the install
+  # just made. The launcher and client configs are committed, and init keeps them.
+  "${VENV_DIR}/bin/arena-composer" init "${REPO_ROOT}" >/dev/null || return 1
+
   # shellcheck disable=SC1091
   source "${VENV_DIR}/bin/activate" || return 1
 

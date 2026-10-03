@@ -1,5 +1,7 @@
 /*.local.md
 .env
+# Linked by `arena-composer init` from the installed package; see AGENTS.md.
+/.agents/skills/author-arena-spec
 
 # Python
 __pycache__/
