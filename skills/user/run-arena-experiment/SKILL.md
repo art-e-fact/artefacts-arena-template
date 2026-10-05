@@ -1,6 +1,6 @@
 ---
 name: run-arena-experiment
-description: Evaluates this project's environment specs with Isaac Lab-Arena's Experiment Runner - selects or writes an Experiment config under experiments/, runs experiment_runner.py against a spec under environments/, coordinates any policy server the Runs require, and reports per-Run status and success rate from outputs/. Use when asked to run, evaluate, score, benchmark or smoke-test an environment, a task spec or a policy. Do not use for interactive no-policy inspection (arena-view), for authoring or editing specs (the arena MCP server), for pytest, or for OSMO submission.
+description: Evaluates this project's environment specs with Isaac Lab-Arena's Experiment Runner - selects or writes an Experiment config under experiments/, runs experiment_runner.py against a spec under environments/, coordinates any policy server the Runs require, and reports per-Run status and success rate from outputs/. Use when asked to run, evaluate, score, benchmark or smoke-test an environment, a task spec or a policy. Do not use for interactive no-policy inspection (arena-view), for authoring or editing specs (the author-arena-spec skill), for pytest, or for OSMO submission.
 allowed-tools: Read Grep Glob Skill Bash(git rev-parse --show-toplevel) Bash(ls *) Bash(test -f *) Bash(test -d *) Bash(nvidia-smi *) Bash(source setup.sh && python submodules/IsaacLab-Arena/isaaclab_arena/evaluation/experiment_runner.py *) Bash(source setup.sh && python -c *) Bash(ffmpeg *)
 ---
 
@@ -164,7 +164,7 @@ outcome*.
 ## Hand off other workflows
 
 - Use `arena-view` or the Environment Runner for interactive inspection without a policy.
-- Use the arena MCP server to author or edit a spec.
+- Use the `author-arena-spec` skill to author or edit a spec.
 - Use Arena's `setup-arena` for installation or runtime repair, and `run-tests` for pytest.
 - Use an OSMO submission workflow for cluster runs. An unqualified request to "run" an Experiment
   means local execution.

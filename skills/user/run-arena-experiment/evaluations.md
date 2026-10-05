@@ -98,7 +98,7 @@ Query: "Add a second bowl to this scene and evaluate it."
 
 Expected behavior:
 
-- Uses the arena MCP server to edit the spec, then this skill to evaluate the result.
+- Uses the `author-arena-spec` skill to edit the spec, then this skill to evaluate the result.
 - Does not hand-edit spec YAML when an authoring tool covers the change.
 - Keeps interactive inspection with `arena-view` rather than launching an Experiment to look at a
   layout.
