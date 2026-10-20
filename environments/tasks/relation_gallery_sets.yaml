@@ -1,6 +1,6 @@
 env_name: relation_gallery_sets
 external_yaml: ../scenes/relation_gallery_sets.yaml
-placement_validators:
+placer_params:
   enabled_checks: [no_overlap, on_relation, next_to]
   required_checks: [no_overlap, on_relation]
 cli_override_specs:
