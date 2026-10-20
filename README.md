@@ -1,5 +1,7 @@
 # artefacts-arena-template
 
+[![Artefacts CI: gr00t](https://app.artefacts.com/api/artefacts/artefacts-arena-template/badges/gr00t.png)](https://app.artefacts.com/artefacts/artefacts-arena-template)
+
 > [!WARNING]
 > Under heavy development, on an alpha release of Isaac Lab-Arena. Expect the layout, the commands
 > and the pinned versions to change, and things to break.
