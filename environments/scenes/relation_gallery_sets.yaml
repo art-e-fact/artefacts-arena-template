@@ -1,5 +1,5 @@
 # Gallery of the graph-level features besides relations: object_sets (see
-# relation_gallery_sets.yaml for the cli_override_specs and placement_validators that pair
+# relation_gallery_sets.yaml for the cli_override_specs and placer_params that pair
 # with this scene).
 embodiment:
   id: droid
