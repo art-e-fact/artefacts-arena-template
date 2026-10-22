@@ -44,13 +44,9 @@ wired into your editor and your agent, specs to start from, and the [Experiments
 
 ## Requirements
 
-- **Linux x86_64**, Ubuntu 22.04 or 24.04.
-- **An NVIDIA RTX GPU** with 16 GB of VRAM, more when a policy server shares it, and driver
-  595.58.03 or later. Experiments need it to run Isaac Sim; the arena-composer tools run without
-  one.
-- **32 GB of RAM and 50 GB of free disk.** Isaac Sim 6.1's
-  [requirements](https://docs.isaacsim.omniverse.nvidia.com/6.1.0/installation/requirements.html)
-  have the full list.
+- **[Isaac Sim 6.1's system requirements](https://docs.isaacsim.omniverse.nvidia.com/6.1.0/installation/requirements.html)**,
+  on Linux x86_64, the only platform Arena supports. A policy server sharing the GPU needs VRAM on
+  top of Isaac Sim's; the arena-composer tools need no GPU at all.
 - **[uv](https://docs.astral.sh/uv/)**, which installs Arena, Isaac Lab and Isaac Sim.
 - **[gh](https://cli.github.com/), signed in with access to
   [arena-composer](https://github.com/art-e-fact/arena-composer).** arena-composer is private for
@@ -59,16 +55,18 @@ wired into your editor and your agent, specs to start from, and the [Experiments
 
 ## Start a project
 
-1. **Create your repository.** On the
-   [template's page](https://github.com/art-e-fact/artefacts-arena-template), click
-   **Use this template** at the top right, then **Create a new repository**, and clone it:
+1. **Create your repository**, on GitHub or with gh.
+
+   On GitHub, click **Use this template** at the top right of the
+   [template's page](https://github.com/art-e-fact/artefacts-arena-template), then
+   **Create a new repository**, and clone it:
 
    ```bash
    git clone https://github.com/<you>/<project>.git
    cd <project>
    ```
 
-   Or do both with gh:
+   With gh, both in one go:
 
    ```bash
    gh repo create <project> --template art-e-fact/artefacts-arena-template --private --clone
@@ -86,9 +84,12 @@ wired into your editor and your agent, specs to start from, and the [Experiments
    takes a while; later ones take a second. Source it in every new shell: it also exports the EULA
    acceptance that Isaac Sim asks for.
 
-Then make it yours: `project:` in [artefacts.yaml](artefacts.yaml), and the specs.
-
 ## Start building
+
+> [!TIP]
+> You can do all of this by talking to your agent too. Ask it to "start a new environment where the
+> robot puts the mug in the bowl, and open it in the viewer", then keep going in plain words; step 3
+> has more to try.
 
 An environment is a spec in two YAML files: a task under `environments/tasks/`, and the scene it
 includes through `external_yaml`, under `environments/scenes/`. A key lives in one file or the
@@ -158,11 +159,28 @@ run fails quietly, such as a camera policy scoring zero because the renderer ran
 ## Put it on Artefacts
 
 [artefacts.yaml](artefacts.yaml) runs the Experiments as [Artefacts](https://docs.artefacts.com/)
-jobs, one per policy. With the job's policy server running, and the
-[Artefacts CLI](https://docs.artefacts.com/getting-started/) installed:
+jobs, one per policy. To set up your Artefacts project, once (the
+[getting started guide](https://docs.artefacts.com/getting-started/) has more):
+
+1. Install the CLI with pipx, or
+   [another way](https://docs.artefacts.com/getting-started/#cli-installation):
+
+   ```bash
+   pipx install artefacts-cli
+   ```
+
+2. Create an account at [app.artefacts.com](https://app.artefacts.com), and log in.
+3. Create a project, and follow the authentication steps on its page to give the CLI its API key:
+
+   ```bash
+   artefacts config add <organization>/<project>
+   ```
+
+4. Set `project:` in [artefacts.yaml](artefacts.yaml) to the same `<organization>/<project>`.
+
+Then, with the job's policy server running:
 
 ```bash
-artefacts config add artefacts/artefacts-arena-template   # once: the project's API key
 artefacts run gr00t
 ```
 
