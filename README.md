@@ -8,7 +8,7 @@
 
 A template for a new [Isaac Lab-Arena](https://github.com/isaac-sim/IsaacLab-Arena) project: Arena
 and Isaac Lab installed by one command, [arena-composer](https://github.com/art-e-fact/arena-composer)
-wired into your editor and your agent, specs to start from, and the Experiments and
+wired into your editor and your agent, specs to start from, and the [Experiments](https://isaac-sim.github.io/IsaacLab-Arena/main/pages/concepts/concept_arena_experiments.html) and
 [Artefacts](https://docs.artefacts.com/) jobs that evaluate a policy on them.
 
 ## Contents
