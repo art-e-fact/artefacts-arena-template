@@ -11,11 +11,25 @@ and Isaac Lab installed by one command, [arena-composer](https://github.com/art-
 wired into your editor and your agent, specs to start from, and the Experiments and
 [Artefacts](https://docs.artefacts.com/) jobs that evaluate a policy on them.
 
+## Contents
+
+- [Highlights](#highlights)
+- [Requirements](#requirements)
+- [Start a project](#start-a-project)
+- [Start building](#start-building)
+- [Evaluate a policy](#evaluate-a-policy)
+- [Put it on Artefacts](#put-it-on-artefacts)
+- [Working with an agent](#working-with-an-agent)
+- [Layout](#layout)
+- [Planned](#planned)
+- [Developing](#developing)
+- [License](#license)
+
 ## Highlights
 
-- **One command to a working Arena.** `source setup.sh` syncs Arena's uv venv — Isaac Lab, Isaac
-  Sim, Arena and the GR00T policy client — installs arena-composer into it, links the skills it
-  ships, accepts the Isaac Sim EULA and activates the venv in your shell.
+- **One command to a working Arena.** `source setup.sh` fetches Arena, syncs its uv venv — Isaac
+  Lab, Isaac Sim, Arena and the GR00T policy client — installs arena-composer into it, links the
+  skills it ships, accepts the Isaac Sim EULA and activates the venv in your shell.
 - **arena-composer, wired in.** A visual editor, headless renderer and MCP server for Arena's YAML
   specs, running without a GPU. The configs that point Claude Code, VS Code and Cursor at the MCP
   server are committed, so an agent has the `arena` tools the moment it opens the project.
@@ -28,71 +42,95 @@ wired into your editor and your agent, specs to start from, and the Experiments 
 - **Agent-ready.** `AGENTS.md` maps the project, and Agent Skills hold the procedures: authoring a
   spec with the MCP tools, running an Experiment, and Arena's own setup and policy-server workflows.
 
+## Requirements
+
+- **Linux x86_64**, Ubuntu 22.04 or 24.04.
+- **An NVIDIA RTX GPU** with 16 GB of VRAM, more when a policy server shares it, and driver
+  595.58.03 or later. Experiments need it to run Isaac Sim; the arena-composer tools run without
+  one.
+- **32 GB of RAM and 50 GB of free disk.** Isaac Sim 6.1's
+  [requirements](https://docs.isaacsim.omniverse.nvidia.com/6.1.0/installation/requirements.html)
+  have the full list.
+- **[uv](https://docs.astral.sh/uv/)**, which installs Arena, Isaac Lab and Isaac Sim.
+- **[gh](https://cli.github.com/), signed in with access to
+  [arena-composer](https://github.com/art-e-fact/arena-composer).** arena-composer is private for
+  now, so `setup.sh` downloads its wheel with gh.
+  <!-- TODO: once arena-composer is public, drop this requirement, and setup.sh's use of gh. -->
+
 ## Start a project
 
-Linux x86_64, with [uv](https://docs.astral.sh/uv/) and [gh](https://cli.github.com/) on PATH — gh
-signed in, since the arena-composer wheel is a GitHub Release asset — and an NVIDIA RTX GPU for
-whatever runs Isaac Sim. The arena-composer commands do without one.
-
-1. Create a repository from this template on GitHub, and clone it with its submodules:
+1. **Create your repository.** On the
+   [template's page](https://github.com/art-e-fact/artefacts-arena-template), click
+   **Use this template** at the top right, then **Create a new repository**, and clone it:
 
    ```bash
-   git clone --recurse-submodules git@github.com:<you>/<project>.git
+   git clone https://github.com/<you>/<project>.git
+   cd <project>
    ```
 
-   Arena names its own submodules by SSH URL. Without an SSH key for GitHub, have git rewrite them:
+   Or do both with gh:
 
    ```bash
-   git -c url."https://github.com/".insteadOf=git@github.com: clone --recurse-submodules https://github.com/<you>/<project>.git
+   gh repo create <project> --template art-e-fact/artefacts-arena-template --private --clone
+   cd <project>
    ```
 
-2. Set up, and look at the starter spec:
+2. **Set up, and look at the starter spec:**
 
    ```bash
    source setup.sh
    arena-view environments/tasks/banana_in_bowl.yaml
    ```
 
-   The first `source setup.sh` syncs Arena's venv, which downloads Isaac Sim and takes a while;
-   later ones take a second. Source it in every new shell: it also exports the EULA acceptance that
-   Isaac Sim asks for.
-
-3. Open the project in Claude Code, VS Code or Cursor. Each finds the `arena` MCP server through its
-   committed config, and the skills through `.claude/skills/` and `.agents/skills/`.
+   The first `source setup.sh` fetches Arena and syncs its venv, which downloads Isaac Sim and
+   takes a while; later ones take a second. Source it in every new shell: it also exports the EULA
+   acceptance that Isaac Sim asks for.
 
 Then make it yours: `project:` in [artefacts.yaml](artefacts.yaml), and the specs.
 
-## Layout
+## Start building
 
-- `environments/` — the specs: `tasks/`, and the `scenes/` they include.
-- `experiments/` — Experiment configs for Arena's Experiment Runner.
-- `skills/` — this project's Agent Skills, linked from `.agents/skills/` and `.claude/skills/`.
-- `bin/` — `arena-mcp`, the MCP launcher every client config names, and `artefacts-experiment`,
-  which runs an Experiment as an Artefacts scenario.
-- `artefacts.yaml` — the Artefacts jobs.
-- `setup.sh` — the environment, and the arena-composer release it pins.
-- `submodules/IsaacLab-Arena` — Arena and Isaac Lab, and the venv everything installs into.
+An environment is a spec in two YAML files: a task under `environments/tasks/`, and the scene it
+includes through `external_yaml`, under `environments/scenes/`. A key lives in one file or the
+other, never both.
 
-## Author an environment
+1. **Create an environment:**
 
-A spec is two YAML files: a task under `environments/tasks/`, and the scene it includes through
-`external_yaml`, under `environments/scenes/`. A key lives in one file or the other, never both.
-arena-composer edits, solves and draws them; its
+   ```bash
+   arena-composer new environments/tasks/my_task.yaml
+   ```
+
+   It writes the task, and the scene it includes at `environments/scenes/my_task.yaml`: a
+   pick-and-place that validates, solves and builds, to start from.
+
+2. **Open it in the viewer:**
+
+   ```bash
+   arena-view environments/tasks/my_task.yaml
+   ```
+
+   A window shows the layout Arena solves for the spec, in 3D, beside a form that edits it: search
+   Arena's assets and NVIDIA's SimReady props, drag one in, and set the relations between them.
+   Every change is re-solved and redrawn, whether it came from the form, your editor or an agent.
+
+3. **Build it with your agent.** The `arena` MCP server is already wired in: Claude Code, VS Code
+   and Cursor start it from the committed `.mcp.json`, `.vscode/mcp.json` and `.cursor/mcp.json`,
+   once `source setup.sh` has run. Open the project in one of them, allow the server if it asks,
+   and with the viewer still open, try:
+
+   - "Add a mug to the table, next to the bowl."
+   - "Swap the robot for a Franka."
+   - "Make the robot put the mug in the bowl instead."
+   - "Render it from the top. Is anything overlapping?"
+   - "Build a kitchen where the robot puts the mug in the sink."
+
+   The server's tools search the assets, edit the spec, check it, and describe and render the
+   solved layout. The `author-arena-spec` skill is the procedure your agent follows with them,
+   through to every sampled layout passing.
+
+For scripts and CI, `arena-render <spec>...` draws the solved layout headless, a PNG per view, and
+`arena-resolve-layout <spec>` prints where the solver put things. arena-composer's
 [README](https://github.com/art-e-fact/arena-composer#readme) has the details.
-
-- `arena-composer new environments/tasks/<name>.yaml` starts a spec: a task and its scene, holding
-  a pick-and-place that validates, solves and builds.
-- `arena-view <spec>` opens the visual editor: the layout Arena solves for the spec in 3D, beside a
-  form that edits it. Every change is re-solved and redrawn, whoever made it.
-- `arena-render <spec>...` draws the solved layout headless, a PNG per view.
-- `arena-resolve-layout <spec>` prints where the solver put things.
-- The `arena` MCP server gives an agent the same: search Arena's assets and NVIDIA's SimReady
-  props, add and remove objects, pick the robot, check a spec, and describe and render the solved
-  layout. The `author-arena-spec` skill is the procedure it follows, through to every sampled
-  layout passing.
-
-Ask your agent for "a kitchen where the robot puts the mug in the sink", with `arena-view` open on
-the file it writes.
 
 ## Evaluate a policy
 
@@ -148,6 +186,17 @@ now; see *Planned*.
     report what the result files say.
   - Arena's own, under `submodules/IsaacLab-Arena/skills/`: `setup-arena`, `serve-gr00t-policy`,
     `serve-openpi-policy` and `run-experiment`, written against the submodule as their root.
+
+## Layout
+
+- `environments/` — the specs: `tasks/`, and the `scenes/` they include.
+- `experiments/` — Experiment configs for Arena's Experiment Runner.
+- `skills/` — this project's Agent Skills, linked from `.agents/skills/` and `.claude/skills/`.
+- `bin/` — `arena-mcp`, the MCP launcher every client config names, and `artefacts-experiment`,
+  which runs an Experiment as an Artefacts scenario.
+- `artefacts.yaml` — the Artefacts jobs.
+- `setup.sh` — the environment, and the arena-composer release it pins.
+- `submodules/IsaacLab-Arena` — Arena and Isaac Lab, and the venv everything installs into.
 
 ## Planned
 
