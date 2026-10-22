@@ -19,6 +19,9 @@ source setup.sh
 arena-view environments/tasks/banana_in_bowl.yaml   # resolve a layout and look at it
 ```
 
+`arena-view` runs until its window is closed: an agent starts it in the background. It redraws on
+every change to the spec's files.
+
 ## Where things are
 
 - `environments/` — the specs. A task includes its scene through `external_yaml`, and the two are a
