@@ -22,9 +22,8 @@
 # it changed. ARENA_COMPOSER_SRC in the environment overrides .env for one run.
 #
 # Requires uv (https://docs.astral.sh/uv/), gh (https://cli.github.com/ — the
-# wheel is a GitHub Release asset), the Arena submodule, and a Rust toolchain
-# only with ARENA_COMPOSER_SRC:
-#   git submodule update --init --recursive
+# wheel is a release asset of a private repo), and a Rust toolchain only with
+# ARENA_COMPOSER_SRC. Fetches the submodules a clone left out.
 
 _setup_main() {
   local REPO_ROOT ARENA_DIR VENV_DIR WHEEL_DIR COMPOSER_SRC FORCE=false WHEEL=false PINNED=false
@@ -51,7 +50,7 @@ _setup_main() {
       --force) FORCE=true ;;
       --pinned) PINNED=true ;;
       -h|--help)
-        sed -n '2,28p' "${BASH_SOURCE[0]:-$0}" | sed 's/^# \?//'
+        sed -n '2,/^$/p' "${BASH_SOURCE[0]:-$0}" | sed 's/^# \?//'
         return 0
         ;;
       *)
@@ -62,11 +61,16 @@ _setup_main() {
     shift
   done
 
+  # Fetch the submodules a clone left out, over HTTPS: Arena names its own by
+  # SSH URL, which GitHub refuses without a registered key. Within Arena only the
+  # missing ones, for a recursive clone that got Arena and failed on those: one
+  # already checked out keeps its commit.
+  local HTTPS=(-c url."https://github.com/".insteadOf=git@github.com:)
   if [[ ! -f "${ARENA_DIR}/pyproject.toml" ]]; then
-    echo "setup.sh: Arena submodule missing at ${ARENA_DIR}" >&2
-    echo "  Run: git submodule update --init --recursive" >&2
-    return 1
+    git -C "${REPO_ROOT}" "${HTTPS[@]}" submodule update --init --recursive || return 1
   fi
+  git -C "${ARENA_DIR}" submodule status | awk '/^-/ { print $2 }' |
+    xargs -r git -C "${ARENA_DIR}" "${HTTPS[@]}" submodule update --init --recursive -- || return 1
 
   if ! command -v uv >/dev/null 2>&1; then
     echo "setup.sh: uv not found on PATH. Install: https://docs.astral.sh/uv/" >&2
@@ -117,6 +121,9 @@ editable = json.loads(d.read_text('direct_url.json') or '{}').get('dir_info', {}
 sys.exit(d.version != '${ARENA_COMPOSER_VERSION}' or editable)" 2>/dev/null; then
     echo "setup.sh: arena-composer ${ARENA_COMPOSER_VERSION} already installed"
   else
+    # gh, since arena-composer is private.
+    # TODO: once it is public, download the wheel without gh, and drop gh from
+    # the README's requirements.
     if ! command -v gh >/dev/null 2>&1; then
       echo "setup.sh: gh not found on PATH. Install: https://cli.github.com/" >&2
       return 1
