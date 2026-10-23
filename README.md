@@ -33,8 +33,9 @@ wired into your editor and your agent, specs to start from, and the [Experiments
 - **arena-composer, wired in.** A visual editor, headless renderer and MCP server for Arena's YAML
   specs, running without a GPU. The configs that point Claude Code, VS Code and Cursor at the MCP
   server are committed, so an agent has the `arena` tools the moment it opens the project.
-- **Specs to start from.** A pick-and-place, and a gallery of specs showing most relation kinds in
-  use, in the two-file layout Arena reads: a task, and the scene it includes.
+- **Specs to start from.** A pick-and-place on a table, the same in a full kitchen, and a gallery of
+  specs showing most relation kinds in use, in the two-file layout Arena reads: a task, and the
+  scene it includes.
 - **Experiments to run on them.** Configs for Arena's Experiment Runner: a zero-action smoke test, a
   look through the cameras, and GR00T N1.6 and openpi pi05 against their policy servers.
 - **Experiments as Artefacts jobs.** `artefacts run <job>` evaluates an Experiment and uploads its
