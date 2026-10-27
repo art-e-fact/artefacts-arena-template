@@ -21,15 +21,14 @@
 # Every run then installs that checkout editable, rebuilding its Rust part when
 # it changed. ARENA_COMPOSER_SRC in the environment overrides .env for one run.
 #
-# Requires uv (https://docs.astral.sh/uv/), gh (https://cli.github.com/ — the
-# wheel is a release asset of a private repo), and a Rust toolchain only with
+# Requires uv (https://docs.astral.sh/uv/), and a Rust toolchain only with
 # ARENA_COMPOSER_SRC. Fetches the submodules a clone left out.
 
 _setup_main() {
-  local REPO_ROOT ARENA_DIR VENV_DIR WHEEL_DIR COMPOSER_SRC FORCE=false WHEEL=false PINNED=false
-  # The arena-composer release to install, from art-e-fact/arena-composer.
+  local REPO_ROOT ARENA_DIR VENV_DIR COMPOSER_SRC FORCE=false WHEEL=false PINNED=false
+  # The arena-composer release to install, from PyPI.
   # It moves together with the Arena submodule.
-  local ARENA_COMPOSER_VERSION=0.4.0
+  local ARENA_COMPOSER_VERSION=0.5.0
   # gr00t-client: the Isaac-GR00T source plus pyzmq, pinned by Arena's lockfile,
   # which Gr00tRemoteClosedloopPolicy needs to reach a GR00T server.
   local UV_SYNC_ARGS=(--group gr00t-client)
@@ -42,7 +41,6 @@ _setup_main() {
   fi
   ARENA_DIR="${REPO_ROOT}/submodules/IsaacLab-Arena"
   VENV_DIR="${ARENA_DIR}/.venv"
-  WHEEL_DIR="${XDG_CACHE_HOME:-${HOME}/.cache}/arena-composer/wheels/v${ARENA_COMPOSER_VERSION}"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -113,7 +111,7 @@ _setup_main() {
     echo "setup.sh: installing arena-composer editable from ${COMPOSER_SRC} ..."
     uv pip install -q --python "${VENV_DIR}/bin/python" -e "${COMPOSER_SRC}" || return 1
   # Not installed, another version, or editable from an earlier
-  # ARENA_COMPOSER_SRC run: install the pinned wheel.
+  # ARENA_COMPOSER_SRC run: install the pinned release.
   elif "${VENV_DIR}/bin/python" -c "
 import importlib.metadata as m, json, sys
 d = m.distribution('arena-composer')
@@ -121,17 +119,8 @@ editable = json.loads(d.read_text('direct_url.json') or '{}').get('dir_info', {}
 sys.exit(d.version != '${ARENA_COMPOSER_VERSION}' or editable)" 2>/dev/null; then
     echo "setup.sh: arena-composer ${ARENA_COMPOSER_VERSION} already installed"
   else
-    # gh, since arena-composer is private.
-    # TODO: once it is public, download the wheel without gh, and drop gh from
-    # the README's requirements.
-    if ! command -v gh >/dev/null 2>&1; then
-      echo "setup.sh: gh not found on PATH. Install: https://cli.github.com/" >&2
-      return 1
-    fi
     echo "setup.sh: installing arena-composer ${ARENA_COMPOSER_VERSION} ..."
-    gh release download "v${ARENA_COMPOSER_VERSION}" -R art-e-fact/arena-composer \
-      -p '*.whl' -D "${WHEEL_DIR}" --clobber || return 1
-    uv pip install --python "${VENV_DIR}/bin/python" "${WHEEL_DIR}"/*.whl || return 1
+    uv pip install --python "${VENV_DIR}/bin/python" "arena-composer==${ARENA_COMPOSER_VERSION}" || return 1
   fi
 
   # Links the skills arena-composer ships into .agents/skills/, from the install
