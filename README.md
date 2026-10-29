@@ -49,10 +49,6 @@ wired into your editor and your agent, specs to start from, and the [Experiments
   on Linux x86_64, the only platform Arena supports. A policy server sharing the GPU needs VRAM on
   top of Isaac Sim's; the arena-composer tools need no GPU at all.
 - **[uv](https://docs.astral.sh/uv/)**, which installs Arena, Isaac Lab and Isaac Sim.
-- **[gh](https://cli.github.com/), signed in with access to
-  [arena-composer](https://github.com/art-e-fact/arena-composer).** arena-composer is private for
-  now, so `setup.sh` downloads its wheel with gh.
-  <!-- TODO: once arena-composer is public, drop this requirement, and setup.sh's use of gh. -->
 
 ## Start a project
 
