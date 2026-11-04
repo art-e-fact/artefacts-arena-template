@@ -28,7 +28,7 @@ _setup_main() {
   local REPO_ROOT ARENA_DIR VENV_DIR COMPOSER_SRC FORCE=false WHEEL=false PINNED=false
   # The arena-composer release to install, from PyPI.
   # It moves together with the Arena submodule.
-  local ARENA_COMPOSER_VERSION=0.5.0
+  local ARENA_COMPOSER_VERSION=0.7.0
   # gr00t-client: the Isaac-GR00T source plus pyzmq, pinned by Arena's lockfile,
   # which Gr00tRemoteClosedloopPolicy needs to reach a GR00T server.
   local UV_SYNC_ARGS=(--group gr00t-client)
