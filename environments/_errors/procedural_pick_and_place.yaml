@@ -3,11 +3,8 @@
 # `registry_name` purely by name, so a spawner_cfg-based Object like ProceduralCube slots in
 # exactly like a USD-backed LibraryObject.
 #
-# NOTE: this currently needs one upstream fix to run. ProceduralCube / ProceduralTable
-# (isaaclab_arena/assets/object_library.py) don't override Object.get_bounding_box(), which
-# defaults to reading `self.usd_path` — empty for procedural assets. The `on` relations below
-# call get_bounding_box() during placement solving and will raise before the sim ever starts.
-# See chat for the proposed fix.
+# NOTE: the layout solves, but nothing places the droid: it stands at the origin, inside the
+# table's box. It needs an initial_pose or relations that clear the table before it can run.
 env_name: procedural_pick_and_place
 embodiment:
   id: droid

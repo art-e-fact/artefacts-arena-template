@@ -46,7 +46,7 @@ relations:
   params: {}
 - kind: next_to
   subject: banana
-  reference: banana
+  reference: bowl
   params:
     side: positive_x
     distance_m: 0.08

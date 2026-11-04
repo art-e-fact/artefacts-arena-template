@@ -83,9 +83,9 @@ def judge(upload: Path, ended: str) -> tuple[dict, dict]:
             for episode in rebuild["episodes"]:
                 episodes.append(episode)
                 progress = episode.get("progress") or {}
-                objectives = progress.get("objectives", {}).values()
-                # A completed objective's active predicate is None.
-                stalled = [p for o in objectives for p in o.get("active_predicates", {}).values() if p]
+                criteria = progress.get("criteria_by_name", {}).values()
+                # A completed criterion's active predicate is None.
+                stalled = [p for c in criteria for p in c.get("active_predicates", {}).values() if p]
                 message = f"progress {progress.get('overall_score', 0):.2f}"
                 message += f", stalled at {', '.join(stalled)}" if stalled else ""
                 # Named like the episode's videos: robot-cam-rebuild0-env0-<camera>-episode-0.mp4

@@ -45,10 +45,11 @@ wired into your editor and your agent, specs to start from, and the [Experiments
 
 ## Requirements
 
-- **[Isaac Sim 6.1's system requirements](https://docs.isaacsim.omniverse.nvidia.com/6.1.0/installation/requirements.html)**,
+- **[Isaac Sim 6.2's system requirements](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/requirements.html)**,
   on Linux x86_64, the only platform Arena supports. A policy server sharing the GPU needs VRAM on
   top of Isaac Sim's; the arena-composer tools need no GPU at all.
-- **[uv](https://docs.astral.sh/uv/)**, which installs Arena, Isaac Lab and Isaac Sim.
+- **[uv](https://docs.astral.sh/uv/)**, which installs Arena, Isaac Lab, Isaac Sim and
+  arena-composer.
 
 ## Start a project
 
